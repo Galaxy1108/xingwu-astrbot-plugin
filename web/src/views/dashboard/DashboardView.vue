@@ -57,7 +57,7 @@
       description="扫码接入一个微信或 QQ 机器人，几分钟内即可上线。也可以先到「我的 Bot」创建并稍后扫码。"
       :actions="[
         { label: '扫码接入', to: '/connect' },
-        { label: '查看模板', to: '/bots', variant: 'tonal' },
+        { label: '我的 Bot', to: '/bots', variant: 'tonal' },
       ]"
       class="mb-6"
     />

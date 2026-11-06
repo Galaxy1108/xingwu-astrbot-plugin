@@ -128,6 +128,27 @@
           @regenerate="startQr"
         />
 
+        <v-alert
+          v-if="devMode && qr"
+          type="info"
+          variant="tonal"
+          density="compact"
+          class="mt-4"
+        >
+          <div class="dev-box">
+            <span>开发模式：模拟扫码状态机（仅 dev server 可见）</span>
+            <div class="dev-actions">
+              <v-btn size="small" variant="tonal" @click="simulate('scanned')">模拟已扫码</v-btn>
+              <v-btn size="small" variant="tonal" color="success" @click="simulate('confirm')">
+                模拟确认登录
+              </v-btn>
+              <v-btn size="small" variant="tonal" color="warning" @click="simulate('expire')">
+                模拟过期
+              </v-btn>
+            </div>
+          </div>
+        </v-alert>
+
         <EmptyState
           v-else
           icon="mdi-qrcode"
@@ -203,6 +224,8 @@ import { useUiStore } from '@/stores/ui'
 import { usePolling } from '@/composables/usePolling'
 import { useClipboard } from '@/composables/useClipboard'
 import { toApiError } from '@/api/client'
+import { getVersion } from '@/api/system'
+import { devQrAction, type DevQrAction } from '@/api/dev'
 import { errorMessage } from '@/utils/errors'
 import { formatDateTime, formatRelative, platformLabel } from '@/utils/format'
 
@@ -231,6 +254,7 @@ const renameSaving = ref(false)
 const deleteOpen = ref(false)
 const deleting = ref(false)
 const finalizing = ref(false)
+const devMode = ref(false)
 
 const { start: startPolling, stop: stopPolling } = usePolling(
   async () => {
@@ -253,6 +277,7 @@ const { start: startPolling, stop: stopPolling } = usePolling(
 )
 
 onMounted(async () => {
+  void loadVersion()
   await reload()
   if (bots.current?.qr) {
     startPolling()
@@ -264,6 +289,38 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   stopPolling()
 })
+
+async function loadVersion(): Promise<void> {
+  try {
+    const version = await getVersion()
+    devMode.value = version.dev_mode === true
+  } catch {
+    devMode.value = false
+  }
+}
+
+async function simulate(action: DevQrAction): Promise<void> {
+  if (!botId.value) return
+  try {
+    await devQrAction(action, botId.value)
+    const labels: Record<DevQrAction, string> = {
+      scanned: '已模拟扫码',
+      confirm: '已模拟确认',
+      expire: '已模拟过期（下次轮询将自动刷新）',
+    }
+    ui.notify(labels[action], 'info')
+    const result = await bots.pollQr(botId.value)
+    qrMessage.value = result.message ?? ''
+    if (result.qr.status === 'created') {
+      stopPolling()
+      await finalize()
+    } else if (result.qr.status === 'expired') {
+      stopPolling()
+    }
+  } catch (error) {
+    qrErrorText.value = errorMessage(error, '开发模式模拟失败')
+  }
+}
 
 async function reload(): Promise<void> {
   if (!botId.value) return
@@ -464,6 +521,18 @@ async function onDelete(): Promise<void> {
 
 .qr-meta {
   font-size: 0.75rem;
+}
+
+.dev-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dev-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .danger-zone {

@@ -9,15 +9,15 @@ M1 控制台前端：Vue 3.5 + Vite 6 + Vuetify 3.7 + Pinia + Vue Router 4（his
 ```bash
 cd web
 npm install          # 首次
-npm run dev          # http://127.0.0.1:5273/console/，/api 代理到 http://127.0.0.1:6180
+npm run dev          # http://127.0.0.1:5275/console/，/api 代理到 http://127.0.0.1:6180
 ```
 
-浏览器打开 `http://127.0.0.1:5273/console/`。
+浏览器打开 `http://127.0.0.1:5275/console/`。
 
 - 管理员：`admin@example.com`（OTP 登录，无密码）。
 - 新用户注册：邮箱 + 邀请码（如 `INV-EXTS-VMV1`）。
 - 开发模式下 OTP 响应含 `dev_code`，登录页会以「开发环境验证码」展示。
-- `/api/version` 返回 `dev_mode=true` 时，扫码页会显示「模拟已扫码 / 模拟确认登录 / 模拟过期」按钮（仅开发服务器）。
+- `/api/version` 返回 `dev_mode=true` 时，扫码接入页与 Bot 详情页会显示「模拟已扫码 / 模拟确认登录 / 模拟过期」按钮（仅开发服务器）。
 
 ## 构建、测试、校验
 
