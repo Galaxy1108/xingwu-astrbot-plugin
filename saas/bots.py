@@ -34,6 +34,7 @@ class BotService:
         port: AstrBotPort,
         templates: TemplateService,
         memory: MemoryStorage,
+        memory_store=None,
         tenants,
         settings,
         audit: AuditService,
@@ -43,6 +44,7 @@ class BotService:
         self.port = port
         self.templates = templates
         self.memory = memory
+        self.memory_store = memory_store
         self.tenants = tenants
         self.settings = settings
         self.audit = audit
@@ -275,6 +277,8 @@ class BotService:
         if created.get("platform"):
             await self._safe(self.port.delete_platform, bot_id)
         if created.get("memory"):
+            if self.memory_store is not None:
+                self.memory_store.close(bot_id)
             try:
                 self.memory.delete_library(bot_id)
             except Exception:  # noqa: BLE001
@@ -382,6 +386,8 @@ class BotService:
         if row.get("persona_name"):
             await self._safe(self.port.delete_persona, row["persona_name"])
         await self._safe(self.port.delete_platform, bot_id)
+        if self.memory_store is not None:
+            self.memory_store.close(bot_id)
         try:
             self.memory.delete_library(bot_id)
         except Exception:  # noqa: BLE001

@@ -17,6 +17,14 @@ logger = logging.getLogger(__name__)
 SCHEMA_DIR = Path(__file__).resolve().parent / "schema"
 
 
+def dict_row_factory(cursor, row):
+    """Row factory that works for both sqlite3 and sqlcipher3 cursors."""
+    return {
+        description[0]: row[index]
+        for index, description in enumerate(cursor.description or ())
+    }
+
+
 class MemoryStorageError(RuntimeError):
     """Raised when a memory library cannot be created/opened."""
 
@@ -30,11 +38,53 @@ def sqlcipher_available() -> bool:
         return False
 
 
-def _schema_sql() -> str:
-    chunks: list[str] = []
+def _schema_files() -> list[tuple[int, Path]]:
+    files: list[tuple[int, Path]] = []
     for path in sorted(SCHEMA_DIR.glob("*.sql")):
-        chunks.append(path.read_text(encoding="utf-8"))
-    return "\n;\n".join(chunks)
+        try:
+            files.append((int(path.name.split("_", 1)[0]), path))
+        except ValueError:
+            continue
+    return files
+
+
+def _apply_schema(conn: sqlite3.Connection) -> None:
+    """Apply pending per-bot schema files, recording versions in schema_migrations."""
+    legacy = (
+        conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'memories'"
+        ).fetchone()
+        is not None
+    )
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS schema_migrations "
+        "(version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)"
+    )
+    applied = {
+        int(row[0])
+        for row in conn.execute("SELECT version FROM schema_migrations").fetchall()
+    }
+    if legacy and not applied:
+        # Databases created before version tracking: only 003+ are pending; the
+        # 003 migration upgrades the old FTS layout in place.
+        applied = {1, 2}
+        now = int(__import__("time").time())
+        conn.executemany(
+            "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)",
+            [(1, now), (2, now)],
+        )
+    now = int(__import__("time").time())
+    for version, path in _schema_files():
+        if version in applied:
+            continue
+        sql = path.read_text(encoding="utf-8")
+        conn.executescript(sql)
+        conn.execute(
+            "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)",
+            (version, now),
+        )
+        applied.add(version)
+    conn.commit()
 
 
 PRAGMAS = (
@@ -96,7 +146,7 @@ class MemoryStorage:
         else:
             conn = sqlite3.connect(str(path))
             conn.execute("PRAGMA journal_mode = WAL")
-        conn.row_factory = sqlite3.Row
+        conn.row_factory = dict_row_factory
         return conn
 
     # -- lifecycle -----------------------------------------------------
@@ -108,7 +158,7 @@ class MemoryStorage:
         now = int(__import__("time").time())
         conn = self._connect(bot_id, key)
         try:
-            conn.executescript(_schema_sql())
+            _apply_schema(conn)
             conn.executemany(
                 "INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)",
                 [

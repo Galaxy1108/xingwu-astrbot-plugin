@@ -13,7 +13,11 @@ from .config import Settings
 from .crypto import KeyManager
 from .db import Database
 from .fake_astrbot import FakeAstrBot
-from .memory.storage.sqlcipher import MemoryStorage
+from .memory.api import MemoryAPI
+from .memory.extraction.command import CommandExtractor
+from .memory.service import LoggingEventBus, MemoryService
+from .memory.storage.sqlcipher import MemoryStorage, MemoryStorageError
+from .memory.store import SqlCipherMemoryStore
 from .ports import AstrBotPort
 from .qr import QrService
 from .templates import TemplateService
@@ -76,12 +80,23 @@ class Container:
         self.memory_storage = MemoryStorage(
             settings.memory_dir, force_plaintext=memory_plaintext
         )
+        self.memory_store = SqlCipherMemoryStore(
+            self.memory_storage, self.memory_key_for_bot
+        )
+        self.memory_service = MemoryService(
+            self.memory_store,
+            clock=self.clock,
+            extractor=CommandExtractor(),
+            events=LoggingEventBus(),
+        )
+        self.memory_api = MemoryAPI(self.memory_service)
         self.port: AstrBotPort = port or FakeAstrBot()
         self.bots = BotService(
             self.db,
             port=self.port,
             templates=self.templates,
             memory=self.memory_storage,
+            memory_store=self.memory_store,
             tenants=self.tenants,
             settings=settings,
             audit=self.audit,
@@ -101,8 +116,16 @@ class Container:
             type(self.port).__name__,
         )
 
+    # -- memory --------------------------------------------------------
+    def memory_key_for_bot(self, bot_id: str) -> bytes:
+        row = self.db.query_one("SELECT user_id FROM bots WHERE id = ?", (bot_id,))
+        if row is None:
+            raise MemoryStorageError(f"Bot 不存在：{bot_id}")
+        return self.tenants.memory_key(row["user_id"], bot_id)
+
     # -- lifecycle -----------------------------------------------------
     def close(self) -> None:
+        self.memory_store.close_all()
         self.db.close()
 
     # -- seed helpers (scripts / dev server / tests) -------------------

@@ -5,6 +5,7 @@ from __future__ import annotations
 from aiohttp import web
 
 from ..errors import AppError, NotFound, ValidationError
+from ..memory.service import MemoryValidationError
 from .app import client_ip, container_of, current_user, ok, settings_of
 
 routes = web.RouteTableDef()
@@ -136,62 +137,113 @@ async def qr_finalize(request: web.Request) -> web.Response:
 
 
 # --------------------------------------------------------------- memories
-def _memory_stub() -> dict:
-    return {"items": [], "total": 0, "page": 1, "page_size": 20}
+def _memory_store(container, request):
+    bot = _owned(container, request, request.match_info["bot_id"])
+    if not bot["memory_db"]:
+        raise NotFound("该 Bot 尚未创建记忆库")
+    return bot
 
 
 @routes.get("/api/bots/{bot_id}/memories")
 async def list_memories(request: web.Request) -> web.Response:
     container = container_of(request)
-    bot = _owned(container, request, request.match_info["bot_id"])
-    if not bot["memory_db"]:
-        raise NotFound("该 Bot 尚未创建记忆库")
-    return ok(_memory_stub())
+    bot = _memory_store(container, request)
+    try:
+        page = int(request.query.get("page", 1))
+        page_size = int(request.query.get("page_size", 20))
+    except (TypeError, ValueError):
+        raise ValidationError("page/page_size 必须是整数") from None
+    data = container.memory_api.list(
+        bot["id"],
+        page=page,
+        page_size=page_size,
+        kind=(request.query.get("kind") or "").strip() or None,
+        tag=(request.query.get("tag") or "").strip() or None,
+        q=(request.query.get("q") or "").strip() or None,
+    )
+    return ok(data)
 
 
 @routes.get("/api/bots/{bot_id}/memories/{memory_id}")
 async def get_memory(request: web.Request) -> web.Response:
     container = container_of(request)
-    _owned(container, request, request.match_info["bot_id"])
-    raise NotFound("记忆不存在")
+    bot = _memory_store(container, request)
+    try:
+        memory_id = int(request.match_info["memory_id"])
+    except (TypeError, ValueError):
+        raise ValidationError("memory_id 必须是整数") from None
+    item = container.memory_api.get(bot["id"], memory_id)
+    if item is None:
+        raise NotFound("记忆不存在")
+    return ok({"memory": item})
 
 
 @routes.patch("/api/bots/{bot_id}/memories/{memory_id}")
 async def patch_memory(request: web.Request) -> web.Response:
     container = container_of(request)
-    _owned(container, request, request.match_info["bot_id"])
-    raise NotFound("记忆不存在")
+    bot = _memory_store(container, request)
+    body = await request.json()
+    try:
+        memory_id = int(request.match_info["memory_id"])
+        item = container.memory_api.update(bot["id"], memory_id, body)
+    except MemoryValidationError as exc:
+        raise ValidationError(str(exc)) from None
+    except (TypeError, ValueError):
+        raise ValidationError("memory_id 必须是整数") from None
+    return ok({"memory": item})
 
 
 @routes.delete("/api/bots/{bot_id}/memories/{memory_id}")
 async def delete_memory(request: web.Request) -> web.Response:
     container = container_of(request)
-    _owned(container, request, request.match_info["bot_id"])
-    raise NotFound("记忆不存在")
+    bot = _memory_store(container, request)
+    try:
+        memory_id = int(request.match_info["memory_id"])
+        container.memory_api.delete(bot["id"], memory_id)
+    except MemoryValidationError as exc:
+        raise NotFound(str(exc)) from None
+    except (TypeError, ValueError):
+        raise ValidationError("memory_id 必须是整数") from None
+    return ok({"deleted": True})
 
 
 @routes.post("/api/bots/{bot_id}/memories/search")
 async def search_memories(request: web.Request) -> web.Response:
     container = container_of(request)
-    _owned(container, request, request.match_info["bot_id"])
-    return ok({"items": []})
+    bot = _memory_store(container, request)
+    body = await request.json()
+    query = str(body.get("q") or body.get("query") or "").strip()
+    if not query:
+        raise ValidationError("请输入检索关键词", field="q")
+    try:
+        limit = int(body.get("limit") or 20)
+    except (TypeError, ValueError):
+        limit = 20
+    data = container.memory_api.list(
+        bot["id"],
+        page=1,
+        page_size=max(1, min(100, limit)),
+        kind=body.get("kind"),
+        q=query,
+    )
+    return ok(data)
 
 
 @routes.post("/api/bots/{bot_id}/memories/export")
 async def export_memories(request: web.Request) -> web.Response:
     container = container_of(request)
-    _owned(container, request, request.match_info["bot_id"])
-    raise AppError(
-        "记忆导出将在 M2 提供", code="not_implemented", status=501
-    )
+    bot = _memory_store(container, request)
+    return ok(container.memory_api.export(bot["id"]))
 
 
 @routes.post("/api/bots/{bot_id}/memories/import")
 async def import_memories(request: web.Request) -> web.Response:
     container = container_of(request)
-    _owned(container, request, request.match_info["bot_id"])
+    bot = _memory_store(container, request)
     raise AppError(
-        "记忆导入将在 M2 提供", code="not_implemented", status=501
+        "从 angel_memory 导入需在管理端执行（M2 提供 CLI：saas/memory/migration/from_angel.py）",
+        code="not_implemented",
+        status=501,
     )
 
 
