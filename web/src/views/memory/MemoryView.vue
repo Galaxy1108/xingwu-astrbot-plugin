@@ -93,7 +93,9 @@
       <v-card v-if="!isNarrow" class="table-card">
         <div class="table-head">
           <div class="table-head__count text-muted">
-            共 {{ bucket.total }} 条 · 当前第 {{ bucket.page }} 页
+            <template v-if="filters.tag">标签筛选：{{ filters.tag }}</template>
+            <template v-else>共 {{ bucket.total }} 条</template>
+            · 当前第 {{ bucket.page }} 页
           </div>
           <div class="text-muted table-head__hint">置顶记忆排在前面</div>
         </div>
@@ -268,7 +270,7 @@
       v-model="editorOpen"
       location="right"
       temporary
-      :width="drawerWidth"
+      :width="480"
       class="memory-drawer"
     >
       <div class="drawer-inner">
@@ -453,7 +455,7 @@ const { kindColor, kindIcon, kindLabel } = useMemoryKindMeta()
 
 const botId = computed(() => (typeof route.params.id === 'string' ? route.params.id : ''))
 const isNarrow = computed(() => smAndDown.value)
-const drawerWidth = computed(() => (smAndDown.value ? '100%' : 480))
+
 const pageSize = 20
 
 const bucket = computed(() => memory.bucket(botId.value))
@@ -914,6 +916,7 @@ async function runSearch(): Promise<void> {
 
 .memory-drawer {
   border-left: 1px solid var(--console-border);
+  max-width: 100vw;
 }
 
 .drawer-inner {

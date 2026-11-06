@@ -46,6 +46,16 @@ src/
 └─ types.ts        与 API.md 对齐的类型
 ```
 
+## M2 记忆模块（`/bots/:id/memory`）
+
+- 路由挂在 ConsoleLayout 下（requiresAuth），Bot 详情页有「记忆」入口。
+- 列表：服务端分页 + 关键字 + kind + tag，筛选条件与 page 保留在 URL query；桌面表格、窄屏卡片。
+- 支持编辑抽屉（content/kind/reasoning/importance/pinned/tags/metadata）、置顶切换、删除二次确认、FTS 检索预览、导出 JSON。
+- 无「新建」入口：记忆由对话中的 LLM 工具/命令写入；导入按钮置灰（M2 CLI：`saas/memory/migration/from_angel.py`）。
+- 接口：`GET /api/bots/{id}/memories`、`GET/PATCH/DELETE .../memories/{mid}`、`POST .../search`、`POST .../export`（import 返回 501，前端不请求）。
+- 前端语义：PATCH 为部分字段更新；`tags`、`metadata` 全量替换；`importance` 服务端夹到 1–5；`kind` 仅 fact/preference/event/note。
+- 新增文件：`views/memory/MemoryView.vue`、`api/memory.ts`、`stores/memory.ts`、`composables/useMemoryKindMeta.ts`、`utils/download.ts`、`stores/__tests__/memory.spec.ts`。
+
 ## 约定
 
 - 会话只靠 HttpOnly Cookie，前端不读写 token、不使用 localStorage 存会话。
@@ -65,3 +75,6 @@ src/
 6. **`GET /api/version` 的 `dev_mode`**：后端已实际返回，API.md §6 未记录；前端仅据此显示开发模式模拟按钮，生产不会调用 `/api/dev/*`。
 7. **管理端配额编辑**：契约支持 `PATCH /api/admin/users/{id}` 的 `quota`，M1 需求只要求「配额查看」，故页面暂为只读查看。
 8. **`/api/admin/access-log`**：契约存在，但 M1 页面清单未要求，暂未接入页面（用户侧 `/api/access-log` 已接入）。
+9. **M2 记忆接口尚未写入 `docs/API.md`**：字段与语义来自 lead 说明及后端实现；前端已按 `{items,total,page,page_size}`、`kind_label` 等实现。
+10. **`tag` 筛选的 total 计数**：实测 `GET /memories?tag=杭州` 返回 1 条 item 但 `total=6`（后端 `count()` 未带 tag 条件）。前端在该筛选下改为显示「标签筛选：杭州」而不再展示总数，建议后端修正 count。
+11. **记忆导入**：`POST .../import` 固定返回 501（M2 CLI），页面按钮置灰且不发请求。
