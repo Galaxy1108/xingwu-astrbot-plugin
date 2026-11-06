@@ -122,3 +122,20 @@ saas/memory/
 | 管理员内容查看 / 内容访问留痕 | 数据表与路由骨架已就位（M3） |
 | 手动充值/账本 | 表结构就位；`/api/admin/orders` → 501，M3 实现 |
 | AstrBot 启动时孤儿 Bot 对账 | `stale_creating_rows()` 提供基础查询，M3 接入 |
+
+## 9. 额度与账本（M3 切片，已实现）
+
+- 模型：`wallets.balance` 只是缓存，**唯一事实来源是 append-only 的 `ledger`**；
+  `SUM(ledger.delta)` 必须等于余额，`BillingService.reconcile()` 可修复缓存。
+- 建单：`orders.external_ref` 唯一（同一外部单号重复建单返回原单 `idempotent=true`）。
+- 确认：`ledger.idem_key = order:{id}` 唯一；重复 confirm 返回 `already_paid=true`，不会二次入账。
+- 手动加/扣：`POST /api/admin/ledger` 写账本 + 更新缓存，支持 `idem_key` 幂等；
+  管理员不能直接改余额（没有这种接口），审计记录 `order.created/confirmed`、`wallet.adjusted`。
+- 用户侧只读：`/api/wallet`、`/api/wallet/ledger`；管理端订单列表带 `user_email`。
+- M4 才会接支付/自动充值/余额不足拦截；本期不拦截调用，只记账。
+
+## 10. 仍未实现（M3 剩余 / M4）
+
+- 对话加密补丁（privacy guard 改造）与测试期加密开关（关闭=全部解密、回填任务、进度条）。
+- 管理员内容查看（对话/记忆）与 `content_access_logs` 用户侧透明化。
+- 支付通道、自动充值、超额拦截、发票。
