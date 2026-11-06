@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 
 from .audit import AuditService
+from .billing import BillingService
 from .auth import AuthService, InviteService, OtpService, SessionService, TenantKeyService
 from .bots import BotService
 from .clock import Clock, SystemClock
@@ -77,6 +78,7 @@ class Container:
             clock=self.clock,
         )
         self.templates = TemplateService(self.db, self.clock)
+        self.billing = BillingService(self.db, audit=self.audit, clock=self.clock)
         self.memory_storage = MemoryStorage(
             settings.memory_dir, force_plaintext=memory_plaintext
         )

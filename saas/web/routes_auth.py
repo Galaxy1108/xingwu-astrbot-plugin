@@ -127,10 +127,13 @@ async def list_templates(request: web.Request) -> web.Response:
 async def wallet(request: web.Request) -> web.Response:
     container = container_of(request)
     user = current_user(request)
-    row = container.db.query_one(
-        "SELECT balance FROM wallets WHERE user_id = ?", (user["id"],)
+    return ok(
+        {
+            "balance": container.billing.balance(user["id"]),
+            "currency": "points",
+            "ledger_total": container.billing.recompute_balance(user["id"]),
+        }
     )
-    return ok({"balance": int(row["balance"]) if row else 0, "currency": "points"})
 
 
 @routes.get("/api/wallet/ledger")
@@ -139,19 +142,7 @@ async def wallet_ledger(request: web.Request) -> web.Response:
     user = current_user(request)
     page = max(1, int(request.query.get("page", 1)))
     page_size = min(100, max(1, int(request.query.get("page_size", 20))))
-    total = int(
-        container.db.scalar(
-            "SELECT COUNT(*) AS c FROM ledger WHERE user_id = ?", (user["id"],), 0
-        )
-    )
-    items = container.db.query(
-        "SELECT id, delta, type, ref, note, created_at FROM ledger "
-        "WHERE user_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
-        (user["id"], page_size, (page - 1) * page_size),
-    )
-    return ok(
-        {"items": items, "total": total, "page": page, "page_size": page_size}
-    )
+    return ok(container.billing.ledger(user["id"], page=page, page_size=page_size))
 
 
 @routes.get("/api/access-log")

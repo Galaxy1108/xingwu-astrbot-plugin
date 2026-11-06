@@ -265,8 +265,8 @@ Memory 对象：
 
 ## 4. 额度 / 访问记录（本期只读，M1 返回空数据）
 
-- `GET /api/wallet` → `{ "balance": 0, "currency": "points" }`
-- `GET /api/wallet/ledger?page=1` → `{ "items": [], "total": 0, "page": 1, "page_size": 20 }`
+- `GET /api/wallet` → `{ "balance": 0, "currency": "points", "ledger_total": 0 }`
+- `GET /api/wallet/ledger?page=1` → `{ "items": [{id,delta,type,ref,note,created_at}], "total": 0, "page": 1, "page_size": 20 }`
 - `GET /api/access-log?page=1` → `{ "items": [], "total": 0, "page": 1, "page_size": 20 }`
 - `GET /api/me/encryption` → `{ "enabled": true, "state": "encrypted", "done": 0, "total": 0, "eta": null }`
 
@@ -300,7 +300,11 @@ Memory 对象：
 AuditLog：`{ "id": 1, "actor_id", "actor_role", "action", "target_type", "target_id", "reason", "detail", "ip", "created_at" }`
 
 - `GET /api/admin/access-log` → 同分页结构（M3 前为空）
-- `POST /api/admin/orders` / `POST /api/admin/orders/{id}/confirm` → M3 前返回 501 `not_implemented`
+- `GET /api/admin/orders?page=&page_size=` → `{items:[{id,user_id,user_email,amount_cny,credits,source,external_ref,status,created_at,paid_at,operator}],total,page,page_size}`
+- `POST /api/admin/orders` `{user_id, credits, amount_cny?, external_ref?, note?}` → 201 `{order, idempotent:false}`；重复 `external_ref` 返回 200 `{order,idempotent:true}`
+- `POST /api/admin/orders/{id}/confirm` → `{order, already_paid:false|true}`（幂等；账本 `idem_key=order:{id}` 防重复入账）
+- `POST /api/admin/ledger` `{user_id, delta(整数,可负), reason?, idem_key?}` → `{ledger, idempotent, balance}`（写 append-only 账本，不直接改余额）
+- `POST /api/admin/users/{id}/wallet/reconcile` → `{user_id, balance}`（用账本重算并修复缓存余额）
 - `GET /api/admin/users/{id}/encryption` → `{ "enabled": true, "state": "encrypted" }`
 - `PUT /api/admin/users/{id}/encryption` `{ "enabled": true }` → 只允许开启；关闭 → 403 `forbidden`
 

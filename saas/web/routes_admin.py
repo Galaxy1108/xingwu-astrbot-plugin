@@ -336,21 +336,71 @@ async def admin_set_encryption(request: web.Request) -> web.Response:
 
 
 # ------------------------------------------------------------------ orders
+@routes.get("/api/admin/orders")
+async def admin_list_orders(request: web.Request) -> web.Response:
+    require_admin(request)
+    container = container_of(request)
+    page, page_size = _paging(request)
+    return ok(container.billing.orders(page=page, page_size=page_size))
+
+
 @routes.post("/api/admin/orders")
 async def admin_create_order(request: web.Request) -> web.Response:
-    require_admin(request)
-    raise AppError(
-        "手动充值将在 M3 提供（本期只做额度账本模型）",
-        code="not_implemented",
-        status=501,
+    admin = require_admin(request)
+    body = await request.json()
+    container = container_of(request)
+    try:
+        credits = int(body.get("credits") or 0)
+        amount = float(body.get("amount_cny") or 0)
+    except (TypeError, ValueError):
+        raise ValidationError("credits/amount_cny 必须是数字") from None
+    result = container.billing.create_order(
+        admin_id=admin["id"],
+        user_id=str(body.get("user_id") or ""),
+        credits=credits,
+        amount_cny=amount,
+        external_ref=body.get("external_ref"),
+        note=str(body.get("note") or ""),
+        ip=client_ip(request),
     )
+    return ok(result, status=200 if result.get("idempotent") else 201)
 
 
 @routes.post("/api/admin/orders/{order_id}/confirm")
 async def admin_confirm_order(request: web.Request) -> web.Response:
-    require_admin(request)
-    raise AppError(
-        "手动充值将在 M3 提供（本期只做额度账本模型）",
-        code="not_implemented",
-        status=501,
+    admin = require_admin(request)
+    container = container_of(request)
+    result = container.billing.confirm_order(
+        order_id=request.match_info["order_id"],
+        admin_id=admin["id"],
+        ip=client_ip(request),
     )
+    return ok(result)
+
+
+@routes.post("/api/admin/ledger")
+async def admin_adjust_ledger(request: web.Request) -> web.Response:
+    """Manual add/deduct (writes ledger; never edits the balance directly)."""
+    admin = require_admin(request)
+    body = await request.json()
+    container = container_of(request)
+    try:
+        delta = int(body.get("delta") or 0)
+    except (TypeError, ValueError):
+        raise ValidationError("delta 必须是整数", field="delta") from None
+    result = container.billing.adjust(
+        admin_id=admin["id"],
+        user_id=str(body.get("user_id") or ""),
+        delta=delta,
+        reason=str(body.get("reason") or ""),
+        idem_key=body.get("idem_key"),
+        ip=client_ip(request),
+    )
+    return ok(result)
+
+
+@routes.post("/api/admin/users/{user_id}/wallet/reconcile")
+async def admin_reconcile_wallet(request: web.Request) -> web.Response:
+    require_admin(request)
+    container = container_of(request)
+    return ok(container.billing.reconcile(request.match_info["user_id"]))
