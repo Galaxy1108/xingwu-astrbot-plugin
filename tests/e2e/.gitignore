@@ -1,6 +1,5 @@
 # E2E 运行产物（截图、trace、报告、缓存的会话、node_modules）
 node_modules/
-package-lock.json
 artifacts/
 test-results/
 playwright-report/

@@ -10,6 +10,7 @@ import {
   newAdminApi,
   registerUserApi,
   saveContextCookies,
+  shot,
   uiLogin,
 } from '../helpers/api'
 
@@ -57,6 +58,7 @@ test.describe('管理端', () => {
       await expect(page.getByRole('heading', { name: '用户管理' })).toBeVisible()
       await expect(page.getByText(user.email)).toBeVisible()
       await expect(page.getByText('管理员').first()).toBeVisible()
+      await shot(page, '10-admin-users')
 
       // Bot 列表：新 Bot + 归属用户
       await page.goto('/console/admin/bots')
@@ -64,11 +66,13 @@ test.describe('管理端', () => {
       const botRow = page.locator('tbody tr', { hasText: botName })
       await expect(botRow).toBeVisible()
       await expect(botRow).toContainText(user.email)
+      await shot(page, '11-admin-bots')
 
       // 审计列表：刚发生的 bot.created
       await page.goto('/console/admin/audit')
       await expect(page.getByRole('heading', { name: '审计日志' })).toBeVisible()
       await expect(page.getByText('bot.created').first()).toBeVisible()
+      await shot(page, '12-admin-audit')
     } finally {
       try {
         await deleteBotApi(user.api, bot.id, bot.name)

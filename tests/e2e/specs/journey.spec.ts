@@ -7,6 +7,7 @@ import {
   getBot,
   navLink,
   newAdminApi,
+  shot,
   uiLogin,
   uniqueEmail,
   waitForBotStatus,
@@ -33,6 +34,7 @@ test('完整用户旅程：登录 → 建 Bot → 扫码上线 → 改名 → �
     // ---- 1. 登录（首次注册：邀请码 + OTP，dev_code 由页面提示展示）
     await uiLogin(page, email, invite)
     await expect(navLink(page, '我的 Bot')).toBeVisible()
+    await shot(page, '01-dashboard-after-login')
 
     // ---- 2. 我的 Bot 列表
     await navLink(page, '我的 Bot').click()
@@ -54,6 +56,7 @@ test('完整用户旅程：登录 → 建 Bot → 扫码上线 → 改名 → �
     await expect(page.getByRole('heading', { name: botName })).toBeVisible()
     await expect(page.getByAltText('扫码登录二维码')).toBeVisible({ timeout: 25_000 })
     await expect(page.getByText('等待扫码', { exact: true })).toBeVisible()
+    await shot(page, '02-bot-detail-qr')
 
     // ---- 4. 模拟扫码（dev_mode）→ 手机确认 → 前端轮询到 created 后自动 finalize
     const headers = await csrfHeaders(context.request)
@@ -77,6 +80,7 @@ test('完整用户旅程：登录 → 建 Bot → 扫码上线 → 改名 → �
     const readyBot = await waitForBotStatus(context.request, botId, 'ready')
     expect(readyBot.bound).toBe(true)
     expect(readyBot.enabled).toBe(true)
+    await shot(page, '03-bot-ready')
 
     // ---- 5. 改名：只改展示名，技术字段不变
     const confIdBefore = readyBot.conf_id
@@ -90,6 +94,7 @@ test('完整用户旅程：登录 → 建 Bot → 扫码上线 → 改名 → �
     expect(renamedBot.name).toBe(newName)
     expect(renamedBot.conf_id).toBe(confIdBefore)
     expect(renamedBot.memory_db).toBe(readyBot.memory_db)
+    await shot(page, '04-bot-renamed')
 
     // ---- 6. 禁用 / 启用（平台实例开关）
     const switchInput = page.locator('.switch-row input[type="checkbox"]')
@@ -112,6 +117,7 @@ test('完整用户旅程：登录 → 建 Bot → 扫码上线 → 改名 → �
     await expect(page.getByText('Bot 已删除')).toBeVisible()
     const gone = await getBot(context.request, botId)
     expect(gone.status).toBe(404)
+    await shot(page, '05-bots-after-delete')
 
     // ---- 8. 审计出现完整记录（管理端 API）
     const auditResponse = await admin.get(`/api/admin/audit?target_id=${botId}&page_size=100`)

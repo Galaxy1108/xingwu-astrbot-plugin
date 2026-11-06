@@ -15,6 +15,8 @@ import { defineConfig, devices } from '@playwright/test'
  *   E2E_ADMIN_EMAIL    默认 admin@example.com
  *   E2E_CHROMIUM       默认 /usr/bin/chromium
  */
+const RUN_ID = process.env.E2E_RUN_ID || 'latest'
+
 export default defineConfig({
   testDir: './specs',
   fullyParallel: false,
@@ -24,9 +26,9 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   reporter: [
     ['list'],
-    ['html', { outputFolder: 'artifacts/playwright-report', open: 'never' }],
+    ['html', { outputFolder: `artifacts/playwright-report-${RUN_ID}`, open: 'never' }],
   ],
-  outputDir: 'artifacts/test-results',
+  outputDir: `artifacts/test-results-${RUN_ID}`,
   use: {
     baseURL: process.env.E2E_BASE_URL || 'http://127.0.0.1:6180',
     viewport: { width: 1440, height: 960 },

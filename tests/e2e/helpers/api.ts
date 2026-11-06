@@ -303,6 +303,13 @@ export async function adminBrowserContext(browser: Browser): Promise<BrowserCont
   return context
 }
 
+/** 保存验收截图到 artifacts/screenshots/（artifacts 已 gitignore）。 */
+export async function shot(page: Page, name: string): Promise<void> {
+  const dir = path.join(ARTIFACTS, 'screenshots')
+  fs.mkdirSync(dir, { recursive: true })
+  await page.screenshot({ path: path.join(dir, `${name}.png`), fullPage: true })
+}
+
 /** 侧边栏导航链接（避免与页面内同名按钮/空态 CTA 冲突）。 */
 export function navLink(page: Page, name: string) {
   return page.getByRole('listbox').getByRole('link', { name, exact: true })

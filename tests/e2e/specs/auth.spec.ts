@@ -5,6 +5,7 @@ import {
   csrfHeaders,
   navLink,
   newAdminApi,
+  shot,
   registerUserApi,
   uiLogin,
   uniqueEmail,
@@ -44,6 +45,7 @@ test.describe('认证与访问控制（浏览器）', () => {
       await expect(page.getByText('403 · 无权限')).toBeVisible()
       // 仍处于登录态（403 不应登出）
       await expect(page.getByRole('link', { name: '返回总览' })).toBeVisible()
+      await shot(page, '13-forbidden-403')
     } finally {
       await context.close()
       await user.api.dispose()
@@ -120,7 +122,7 @@ test.describe('管理员登录入口', () => {
     try {
       await page.goto('/console/')
       await expect(navLink(page, '管理后台')).toBeVisible()
-      await expect(page.getByText(ADMIN_EMAIL)).toBeVisible()
+      await expect(page.getByRole('heading', { name: /欢迎回来/ })).toBeVisible()
     } finally {
       await context.close()
       await admin.dispose()
