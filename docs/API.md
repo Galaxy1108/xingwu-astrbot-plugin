@@ -238,6 +238,31 @@ Bot 对象：
 `200 { "bot": Bot }`：写入加密凭据、启用平台、状态 `ready`，5s 内上线。
 未扫码成功 → 409 `qr_not_ready`。
 
+## 3.1 记忆（M2 已实现）
+
+记忆写入只来自 LLM 工具 `memory_remember` / 用户命令 `/记住 ...`，HTTP 只提供管理能力。
+
+Memory 对象：
+
+```json
+{
+  "id": 1, "kind": "preference", "kind_label": "偏好",
+  "content": "用户喜欢深夜聊天", "reasoning": "",
+  "importance": 4, "pinned": true, "tags": ["作息"],
+  "metadata": {}, "source_conversation_id": "", "source_message_id": "",
+  "created_at": 0, "updated_at": 0, "last_recalled_at": 0, "recall_count": 0
+}
+```
+
+- `GET  /api/bots/{id}/memories?page=&page_size=&kind=&tag=&q=` → `{items,total,page,page_size}`
+- `GET  /api/bots/{id}/memories/{mid}` → `{ "memory": Memory }`
+- `PATCH /api/bots/{id}/memories/{mid}` `{content?,kind?,reasoning?,importance?,pinned?,tags?,metadata?}` → `{ "memory": Memory }`
+  - 部分更新；`tags` / `metadata` 为**全量替换**；`kind ∈ fact|preference|event|note`；`importance ∈ 1..5`。
+- `DELETE /api/bots/{id}/memories/{mid}` → `{ "deleted": true }`（软删）
+- `POST /api/bots/{id}/memories/search` `{q, kind?, limit?}` → `{items,total,page,page_size}`
+- `POST /api/bots/{id}/memories/export` → `{bot_id, exported_at, count, items}`（前端下载 JSON）
+- `POST /api/bots/{id}/memories/import` → M2 暂 501（导入走 CLI：`saas/memory/migration/from_angel.py`）
+
 ## 4. 额度 / 访问记录（本期只读，M1 返回空数据）
 
 - `GET /api/wallet` → `{ "balance": 0, "currency": "points" }`

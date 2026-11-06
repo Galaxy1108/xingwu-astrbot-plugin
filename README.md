@@ -4,7 +4,9 @@
 
 插件即后端：账号、会话、模板、配额、Bot 注册表、审计、密钥、记忆库都在插件内；控制台是插件托管的 Vue3 静态页面 + 同源 JSON API，不引入独立业务后端/Postgres/Redis。
 
-> 当前进度：**M1（账号 + 建 Bot）已完成**。M2（记忆模块）只落了骨架与建库/删库（SQLCipher 已验证）；M3（隐私加密开关 + 管理端内容查看/额度）接口骨架已就位。
+> 当前进度：**M1（账号 + 建 Bot）已完成并通过独立验收**；**M2 记忆模块后端已完成**（分层、SQLCipher、
+> FTS 检索、LLM 工具、angel_memory 导入 CLI、HTTP 管理接口；前端记忆页在 M2 收尾中）。
+> M3（隐私加密开关 + 管理端内容查看/额度）接口骨架已就位。
 
 ## 快速开始（独立开发模式，无需启动 AstrBot）
 
@@ -60,7 +62,8 @@ saas/
 ├─ templates.py          预设模板（创建快照）
 ├─ bots.py               Bot 生命周期（创建/回滚/启停/改名/删除）
 ├─ qr.py                 扫码状态机（60s TTL、≤3 自动刷新、5min 空闲回收）
-├─ memory/               自研记忆模块骨架；storage/sqlcipher.py 建/删加密库
+├─ memory/               自研记忆模块：models/ports/service/api，SQLCipher repo + InMemory 契约双实现，
+│                        CJK bigram FTS、规则重排、命令抽取、LLM 工具、angel_memory 导入
 ├─ ports.py              与 AstrBot 的边界协议
 ├─ astrbot_adapter.py    真实 AstrBot 集成（人格/配置/路由/平台/扫码）
 ├─ fake_astrbot.py       测试与 dev server 的确定性替身
@@ -80,7 +83,7 @@ saas/
 
 ## 测试与验收
 
-- 后端：`tests/`（47 例）覆盖邀请一次性 410、OTP 规则、会话/禁用、CSRF、模板快照/下架、配额、创建回滚、跨租户 404、QR 60s/≤3 刷新/空闲回收、凭据加密、删除清理、SQLCipher 库不可被普通 sqlite3 打开。
+- 后端：`tests/`（74 例）覆盖邀请一次性 410、OTP 规则、会话/禁用、CSRF、模板快照/下架、配额、创建回滚、跨租户 404、QR 60s/≤3 刷新/空闲回收、凭据加密、删除清理、SQLCipher 库不可被普通 sqlite3 打开；记忆模块（契约双实现、去重、召回排序、跨 Bot 隔离、10k FTS 13ms、删 Bot 清理连接/文件）。
 - 前端：`web/` 内 Vitest（守卫 401/403、ConfirmDialog、API client CSRF）。
 - E2E：`tests/e2e/`（Playwright，使用系统 chromium）；验收记录见 `docs/ACCEPTANCE.md`。
 
