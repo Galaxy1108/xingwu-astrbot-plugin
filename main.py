@@ -18,6 +18,8 @@ from astrbot.core.star.star_tools import StarTools
 from .saas.astrbot_adapter import AstrBotAdapter
 from .saas.config import Settings
 from .saas.container import Container
+from .saas.memory.tools.llm_tools import TOOL_DEFINITIONS, dispatch as dispatch_memory_tool
+from .saas.tenancy import parse_bot_id_from_umo
 from .saas.web.app import create_app
 
 PLUGIN_NAME = "astrbot_plugin_saas"
@@ -42,6 +44,7 @@ class SaaSBotPlugin(Star):
         except Exception:
             logger.error("SaaS 核心初始化失败（控制台不会启动）", exc_info=True)
             return
+        self._register_memory_tools()
         self._server_task = asyncio.create_task(self._serve())
         self._gc_task = asyncio.create_task(self._gc_loop())
         logger.info(
@@ -49,6 +52,79 @@ class SaaSBotPlugin(Star):
             self.settings.host,
             self.settings.port,
         )
+
+    # -- LLM memory tools (M2) -----------------------------------------
+    def _register_memory_tools(self) -> None:
+        """Expose memory_remember/recall/forget to the agent (fail-closed by UMO)."""
+        if self.container is None:
+            return
+        for spec in TOOL_DEFINITIONS:
+            properties = (spec.get("parameters") or {}).get("properties") or {}
+            func_args = [
+                {
+                    "type": item.get("type", "string"),
+                    "name": name,
+                    "description": item.get("description", ""),
+                }
+                for name, item in properties.items()
+                if item.get("type") != "array"
+            ]
+            try:
+                self.context.register_llm_tool(
+                    spec["name"],
+                    func_args,
+                    spec["description"],
+                    self._tool_handler(spec["name"]),
+                )
+            except Exception:  # noqa: BLE001
+                logger.warning(
+                    "astrbot_plugin_saas: 注册 LLM 记忆工具 %s 失败", spec["name"], exc_info=True
+                )
+
+    def _tool_handler(self, name: str):
+        async def handler(event=None, context=None, **kwargs):
+            return await self._run_memory_tool(name, kwargs, event)
+
+        handler.__name__ = name
+        return handler
+
+    def _bot_id_for_event(self, event) -> str | None:
+        if self.container is None:
+            return None
+        umo = getattr(event, "unified_msg_origin", "") if event is not None else ""
+        bot_id = parse_bot_id_from_umo(umo)
+        if not bot_id:
+            return None
+        row = self.container.db.query_one(
+            "SELECT status FROM bots WHERE id = ?", (bot_id,)
+        )
+        if row is None or row["status"] == "deleted":
+            return None
+        return bot_id
+
+    async def _run_memory_tool(self, name: str, arguments: dict, event) -> str:
+        import json
+
+        bot_id = self._bot_id_for_event(event)
+        if bot_id is None:
+            logger.warning(
+                "astrbot_plugin_saas: 拒绝记忆工具调用（无法解析租户 Bot）umo=%s",
+                getattr(event, "unified_msg_origin", ""),
+            )
+            return json.dumps(
+                {"ok": False, "error": "无法确定当前 Bot 租户，已拒绝记忆操作"},
+                ensure_ascii=False,
+            )
+        try:
+            result = await dispatch_memory_tool(
+                self.container.memory_api, bot_id, name, arguments
+            )
+            return json.dumps({"ok": True, **result}, ensure_ascii=False, default=str)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("astrbot_plugin_saas: 记忆工具执行失败 %s", name, exc_info=True)
+            return json.dumps(
+                {"ok": False, "error": str(exc)}, ensure_ascii=False
+            )
 
     async def _serve(self) -> None:
         from aiohttp import web

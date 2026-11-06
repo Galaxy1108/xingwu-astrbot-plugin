@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .api import MemoryAPI
+from ..api import MemoryAPI
 
 TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {

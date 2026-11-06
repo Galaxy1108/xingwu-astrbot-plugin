@@ -341,3 +341,36 @@ def test_fts_performance_10k(tmp_path):
     assert elapsed_ms < 100, f"FTS over 10k rows took {elapsed_ms:.1f}ms"
     print(f"FTS 10k rows: {elapsed_ms:.1f}ms")
     conn.close()
+
+
+def test_tenancy_umo_parsing():
+    from saas.tenancy import parse_bot_id_from_umo, route_prefix
+
+    assert parse_bot_id_from_umo("b_abc123:friend:session") == "b_abc123"
+    assert parse_bot_id_from_umo("weixin_oc:friend:session") is None
+    assert parse_bot_id_from_umo("b_") is None
+    assert parse_bot_id_from_umo("") is None
+    assert parse_bot_id_from_umo(None) is None
+    assert route_prefix("b_abc") == "b_abc::"
+
+
+async def test_llm_tool_dispatch():
+    from saas.memory.api import MemoryAPI
+    from saas.memory.service import MemoryService
+    from saas.memory.store import InMemoryStore
+    from saas.memory.tools.llm_tools import dispatch
+
+    service = MemoryService(InMemoryStore())
+    api = MemoryAPI(service)
+    saved = await dispatch(
+        api,
+        "b1",
+        "memory_remember",
+        {"content": "用户喜欢喝乌龙茶", "kind": "preference", "tags": ["茶"]},
+    )
+    assert saved["created"] is True
+    recalled = await dispatch(api, "b1", "memory_recall", {"query": "乌龙茶"})
+    assert recalled["items"] and "乌龙茶" in recalled["items"][0]["content"]
+    assert "[记忆]" in recalled["prompt"]
+    await dispatch(api, "b1", "memory_forget", {"memory_id": saved["memory"]["id"]})
+    assert api.list("b1")["total"] == 0

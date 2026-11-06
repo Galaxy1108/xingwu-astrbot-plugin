@@ -7,6 +7,14 @@
     >
       <template #actions>
         <StatusChip v-if="bot" :status="bot.status" />
+        <v-btn
+          v-if="bot"
+          variant="tonal"
+          prepend-icon="mdi-brain"
+          :to="`/bots/${botId}/memory`"
+        >
+          记忆
+        </v-btn>
         <v-btn variant="text" prepend-icon="mdi-refresh" :loading="loading" @click="reload">刷新</v-btn>
       </template>
     </PageHeader>

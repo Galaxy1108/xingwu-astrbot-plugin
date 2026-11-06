@@ -254,3 +254,58 @@ export interface AuditQuery extends PageQuery {
   actor_id?: string
   target_id?: string
 }
+
+/* ------------------------------------------------------------------ */
+/* M2 记忆模块（契约见 lead 提供的接口说明；docs/API.md 尚未收录）        */
+/* ------------------------------------------------------------------ */
+
+export type MemoryKind = 'fact' | 'preference' | 'event' | 'note'
+
+export interface MemoryItem {
+  id: number
+  kind: MemoryKind
+  kind_label: string
+  content: string
+  reasoning: string
+  importance: number
+  pinned: boolean
+  tags: string[]
+  metadata: Record<string, unknown>
+  source_conversation_id?: string
+  source_message_id?: string
+  created_at: number
+  updated_at: number
+  last_recalled_at: number
+  recall_count: number
+}
+
+export interface MemoryListQuery {
+  page?: number
+  page_size?: number
+  kind?: string
+  tag?: string
+  q?: string
+}
+
+export interface MemoryPatch {
+  content?: string
+  kind?: MemoryKind
+  reasoning?: string
+  importance?: number
+  pinned?: boolean
+  tags?: string[]
+  metadata?: Record<string, unknown>
+}
+
+export interface MemorySearchPayload {
+  q: string
+  kind?: string
+  limit?: number
+}
+
+export interface MemoryExportResult {
+  bot_id: string
+  exported_at: number
+  count: number
+  items: MemoryItem[]
+}

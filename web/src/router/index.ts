@@ -49,6 +49,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Bot 详情' },
       },
       {
+        path: 'bots/:id/memory',
+        name: 'bot-memory',
+        component: () => import('@/views/memory/MemoryView.vue'),
+        meta: { title: '记忆' },
+      },
+      {
         path: 'settings/privacy',
         name: 'privacy',
         component: () => import('@/views/settings/PrivacyView.vue'),
