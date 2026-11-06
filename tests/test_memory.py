@@ -374,3 +374,11 @@ async def test_llm_tool_dispatch():
     assert "[记忆]" in recalled["prompt"]
     await dispatch(api, "b1", "memory_forget", {"memory_id": saved["memory"]["id"]})
     assert api.list("b1")["total"] == 0
+
+
+def test_contract_count_with_tag(repo):
+    repo.add(MemoryDraft(content="杭州记忆", tags=["杭州", "地点"]), now=1000)
+    repo.add(MemoryDraft(content="其它记忆", tags=["工作"]), now=1001)
+    assert repo.count() == 2
+    assert repo.count(tag="杭州") == 1
+    assert repo.count(kind="fact", tag="工作") == 1

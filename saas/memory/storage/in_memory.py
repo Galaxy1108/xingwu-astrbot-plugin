@@ -149,11 +149,13 @@ class InMemoryRepository:
         hits.sort(key=lambda hit: (hit.score, hit.memory.id), reverse=True)
         return hits[:limit]
 
-    def count(self, *, kind: str | None = None) -> int:
+    def count(self, *, kind: str | None = None, tag: str | None = None) -> int:
         return sum(
             1
             for memory in self._items.values()
-            if not memory.deleted_at and (kind is None or memory.kind == kind)
+            if not memory.deleted_at
+            and (kind is None or memory.kind == kind)
+            and (tag is None or tag in memory.tags)
         )
 
     def find_duplicate(self, content: str, *, since: int) -> Memory | None:

@@ -202,7 +202,7 @@ class MemoryService:
             memories = memories[start : start + page_size]
         else:
             memories = repo.list(kind=kind, tag=tag, limit=page_size * page)
-            total = repo.count(kind=kind)
+            total = repo.count(kind=kind, tag=tag)
             memories = memories[(page - 1) * page_size :]
         return {
             "items": [memory.to_dict() for memory in memories],

@@ -93,8 +93,7 @@
       <v-card v-if="!isNarrow" class="table-card">
         <div class="table-head">
           <div class="table-head__count text-muted">
-            <template v-if="filters.tag">标签筛选：{{ filters.tag }}</template>
-            <template v-else>共 {{ bucket.total }} 条</template>
+            共 {{ bucket.total }} 条<template v-if="filters.tag"> · 标签：{{ filters.tag }}</template>
             · 当前第 {{ bucket.page }} 页
           </div>
           <div class="text-muted table-head__hint">置顶记忆排在前面</div>

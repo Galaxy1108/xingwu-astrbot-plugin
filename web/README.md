@@ -76,5 +76,5 @@ src/
 7. **管理端配额编辑**：契约支持 `PATCH /api/admin/users/{id}` 的 `quota`，M1 需求只要求「配额查看」，故页面暂为只读查看。
 8. **`/api/admin/access-log`**：契约存在，但 M1 页面清单未要求，暂未接入页面（用户侧 `/api/access-log` 已接入）。
 9. **M2 记忆接口尚未写入 `docs/API.md`**：字段与语义来自 lead 说明及后端实现；前端已按 `{items,total,page,page_size}`、`kind_label` 等实现。
-10. **`tag` 筛选的 total 计数**：实测 `GET /memories?tag=杭州` 返回 1 条 item 但 `total=6`（后端 `count()` 未带 tag 条件）。前端在该筛选下改为显示「标签筛选：杭州」而不再展示总数，建议后端修正 count。
+10. **`tag` 筛选的 total 计数（已修复）**：后端 `count()` 已带 tag 条件，`GET /memories?tag=杭州` 现在返回 `items=1, total=1`；前端恢复展示「共 N 条 · 标签：X」。
 11. **记忆导入**：`POST .../import` 固定返回 501（M2 CLI），页面按钮置灰且不发请求。

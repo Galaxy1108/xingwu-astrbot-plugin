@@ -273,13 +273,19 @@ class SqlCipherRepository:
                 return memory
         return None
 
-    def count(self, *, kind: str | None = None) -> int:
-        where = "deleted_at = 0"
+    def count(self, *, kind: str | None = None, tag: str | None = None) -> int:
+        where = ["m.deleted_at = 0"]
         params: list[Any] = []
         if kind:
-            where += " AND kind = ?"
+            where.append("m.kind = ?")
             params.append(kind)
+        if tag:
+            where.append(
+                "EXISTS(SELECT 1 FROM memory_tags t WHERE t.memory_id = m.id AND t.tag = ?)"
+            )
+            params.append(tag)
         row = self.conn.execute(
-            f"SELECT COUNT(*) AS c FROM memories WHERE {where}", params
+            f"SELECT COUNT(*) AS c FROM memories m WHERE {' AND '.join(where)}",
+            params,
         ).fetchone()
         return int(row["c"] if row else 0)
