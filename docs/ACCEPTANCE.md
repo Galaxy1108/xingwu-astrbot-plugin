@@ -270,3 +270,8 @@ F3 修订说明：首版断言“最近 100 条审计里必须有 `auth.login`�
 | 权限 | 普通用户调用 `/api/admin/orders|ledger` → 403；用户只能读自己的余额/流水 |
 | 审计 | `order.created` / `order.confirmed` / `wallet.adjusted` 写入 `audit_logs` |
 | 回归 | 全量 pytest 87 passed；M1 API 验收 25/25 不受影响 |
+
+## M3 前端验收（追加）
+
+- `tests/e2e/specs/billing.spec.ts`：管理员建单（唯一 external_ref）→ 重复单幂等 → 页面确认到账 → 再次确认 `already_paid=true` 且余额不变 → 用户账单页可见流水。
+- `npm run test` 36 例（含 4 个额度用例）；`npm run build` 通过。

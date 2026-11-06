@@ -84,9 +84,9 @@ saas/
 
 ## 测试与验收
 
-- 后端：`tests/`（80 例）覆盖邀请一次性 410、OTP 规则、会话/禁用、CSRF、模板快照/下架、配额、创建回滚、跨租户 404、QR 60s/≤3 刷新/空闲回收、凭据加密、删除清理、SQLCipher 库不可被普通 sqlite3 打开；记忆模块（契约双实现、去重、召回排序、跨 Bot 隔离、10k FTS 13ms、删 Bot 清理连接/文件）。
-- 前端：`web/` 内 Vitest（32 例：守卫 401/403、ConfirmDialog、API client CSRF、记忆 store）。
-- E2E：`tests/e2e/`（Playwright，使用系统 chromium；10 例：M1 登录/权限/扫码/管理端 + M2 记忆页）；验收记录见 `docs/ACCEPTANCE.md`。
+- 后端：`tests/`（87 例）覆盖邀请一次性 410、OTP 规则、会话/禁用、CSRF、模板快照/下架、配额、创建回滚、跨租户 404、QR 60s/≤3 刷新/空闲回收、凭据加密、删除清理、SQLCipher 库不可被普通 sqlite3 打开；记忆模块（契约双实现、去重、召回排序、跨 Bot 隔离、10k FTS 13ms、删 Bot 清理连接/文件）。
+- 前端：`web/` 内 Vitest（36 例：守卫 401/403、ConfirmDialog、API client CSRF、记忆 store、额度单）。
+- E2E：`tests/e2e/`（Playwright，使用系统 chromium；11 例：M1 登录/权限/扫码/管理端 + M2 记忆页 + M3 额度）；验收记录见 `docs/ACCEPTANCE.md`。
 
 ## 安全边界（摘要）
 
