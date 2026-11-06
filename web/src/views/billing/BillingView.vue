@@ -1,6 +1,6 @@
 <template>
   <div>
-    <PageHeader title="额度" description="余额与流水；M1 阶段为只读展示。">
+    <PageHeader title="额度" description="余额与 append-only 账本流水；本页只读，额度变动以服务端账本为准。">
       <template #actions>
         <v-btn variant="text" prepend-icon="mdi-refresh" :loading="loading" @click="load">刷新</v-btn>
       </template>
@@ -10,7 +10,7 @@
       <StatCard
         label="可用额度"
         :value="walletText"
-        :hint="wallet?.currency === 'points' ? '积分余额' : wallet?.currency || '以服务端为准'"
+        :hint="walletHint"
         icon="mdi-wallet-outline"
         :loading="loading"
       />
@@ -53,18 +53,20 @@
               <tr>
                 <th>时间</th>
                 <th>变动</th>
-                <th>余额</th>
+                <th>类型</th>
                 <th>说明</th>
+                <th>关联</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="entry in items" :key="String(entry.id)">
                 <td class="nowrap">{{ formatDateTime(entry.created_at) }}</td>
-                <td :class="entry.amount >= 0 ? 'amount-plus' : 'amount-minus'">
-                  {{ entry.amount >= 0 ? '+' : '' }}{{ formatNumber(entry.amount) }}
+                <td :class="ledgerDelta(entry) >= 0 ? 'amount-plus' : 'amount-minus'">
+                  {{ deltaText(entry) }}
                 </td>
-                <td>{{ entry.balance_after !== undefined ? formatNumber(entry.balance_after) : '—' }}</td>
-                <td>{{ entry.reason || '—' }}</td>
+                <td class="nowrap">{{ ledgerTypeLabel(entry.type) }}</td>
+                <td>{{ entry.note || entry.reason || '—' }}</td>
+                <td class="text-mono ref-cell" :title="entry.ref || ''">{{ entry.ref || '—' }}</td>
               </tr>
             </tbody>
           </v-table>
@@ -117,6 +119,32 @@ const walletText = computed(() => {
 const tokenLimitText = computed(() =>
   auth.limits ? formatNumber(auth.limits.monthly_tokens) : '—',
 )
+
+const walletHint = computed(() => {
+  if (wallet.value?.ledger_total !== undefined) {
+    return `账本重算余额 ${formatNumber(wallet.value.ledger_total)}`
+  }
+  return wallet.value?.currency === 'points' ? '积分余额' : wallet.value?.currency || '以服务端为准'
+})
+
+function ledgerDelta(entry: LedgerEntry): number {
+  return entry.delta ?? entry.amount ?? 0
+}
+
+function deltaText(entry: LedgerEntry): string {
+  const value = ledgerDelta(entry)
+  return `${value >= 0 ? '+' : ''}${formatNumber(value)}`
+}
+
+function ledgerTypeLabel(type?: string): string {
+  const labels: Record<string, string> = {
+    grant: '订单入账',
+    adjust: '手动调整',
+    consume: '消费',
+    refund: '退回',
+  }
+  return type ? labels[type] ?? type : '—'
+}
 
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / Math.max(1, pageSize.value))))
 
@@ -199,6 +227,15 @@ async function onPage(next: number): Promise<void> {
 .amount-minus {
   color: #c62828;
   font-weight: 600;
+}
+
+.ref-cell {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.76rem;
+  color: var(--console-text-muted);
 }
 
 .pager {

@@ -156,12 +156,20 @@ export interface QrPollResult {
 export interface Wallet {
   balance: number
   currency: string
+  /** 后端返回的账本重算余额（用于对账），不是流水条数。 */
+  ledger_total?: number
 }
 
 export interface LedgerEntry {
   id: number | string
-  amount: number
+  /** 账本变动值（正数入账、负数扣减） */
+  delta?: number
+  /** 兼容旧字段 */
+  amount?: number
   balance_after?: number
+  type?: string
+  ref?: string
+  note?: string
   reason?: string
   detail?: unknown
   created_at: number
@@ -196,6 +204,53 @@ export interface AdminUser extends User {
 export interface AdminUserPatch {
   status?: UserStatus
   quota?: Partial<Quota>
+}
+
+export type OrderStatus = 'pending' | 'paid'
+
+export interface AdminOrder {
+  id: string
+  user_id: string
+  user_email?: string
+  amount_cny: number
+  credits: number
+  source: string
+  external_ref?: string | null
+  status: OrderStatus
+  created_at: number
+  paid_at: number
+  operator: string
+}
+
+export interface AdminOrderCreatePayload {
+  user_id: string
+  credits: number
+  amount_cny?: number
+  external_ref?: string
+  note?: string
+}
+
+export interface AdminOrderCreateResult {
+  order: AdminOrder
+  idempotent: boolean
+}
+
+export interface AdminOrderConfirmResult {
+  order: AdminOrder
+  already_paid: boolean
+}
+
+export interface AdminLedgerAdjustPayload {
+  user_id: string
+  delta: number
+  reason?: string
+  idem_key?: string
+}
+
+export interface AdminLedgerAdjustResult {
+  ledger: LedgerEntry
+  idempotent: boolean
+  balance: number
 }
 
 export interface AdminBot extends Bot {

@@ -56,6 +56,14 @@ src/
 - 前端语义：PATCH 为部分字段更新；`tags`、`metadata` 全量替换；`importance` 服务端夹到 1–5；`kind` 仅 fact/preference/event/note。
 - 新增文件：`views/memory/MemoryView.vue`、`api/memory.ts`、`stores/memory.ts`、`composables/useMemoryKindMeta.ts`、`utils/download.ts`、`stores/__tests__/memory.spec.ts`。
 
+## M3 手动额度与账本（管理端 `/admin/orders`、用户端 `/billing`）
+
+- 管理端「手动充值」：订单列表（状态 chip、金额/点数、用户邮箱、创建/到账时间，分页保留在 URL）；新建充值单（用户下拉来自 `/api/admin/users`，credits 必填正整数、金额可选、外部单号防重）；待确认订单「确认到账」二次确认；「手动加/扣额度」对话框（正负 delta、原因、可选幂等键）；成功刷新列表并 toast；加载骨架/空态/错误重试。
+- 幂等：重复 `external_ref` 返回已有订单（idempotent=true，不重复创建）；重复确认返回 already_paid（不重复入账）；相同 `idem_key` 的加/扣只入账一次；页面按服务端返回给出明确提示。
+- 用户端「额度」：余额 + append-only 流水（时间/变动/类型/说明/关联），服务端分页，展示后端返回的账本重算余额；只读。
+- 新增/修改：`api/admin.ts`（orders/ledger/reconcile）、`stores/admin.ts`（orders）、`utils/walletAdmin.ts`（表单校验与 payload）、`views/admin/OrdersView.vue`、`views/billing/BillingView.vue`、`stores/__tests__/adminOrders.spec.ts`。
+- 余额永远以账本为准；前端不做任何本地加减，成功与否以服务端返回的 balance 为准。
+
 ## 约定
 
 - 会话只靠 HttpOnly Cookie，前端不读写 token、不使用 localStorage 存会话。
@@ -78,3 +86,6 @@ src/
 9. **M2 记忆接口尚未写入 `docs/API.md`**：字段与语义来自 lead 说明及后端实现；前端已按 `{items,total,page,page_size}`、`kind_label` 等实现。
 10. **`tag` 筛选的 total 计数（已修复）**：后端 `count()` 已带 tag 条件，`GET /memories?tag=杭州` 现在返回 `items=1, total=1`；前端恢复展示「共 N 条 · 标签：X」。
 11. **记忆导入**：`POST .../import` 固定返回 501（M2 CLI），页面按钮置灰且不发请求。
+12. **M3 额度接口尚未写入 `docs/API.md`**：字段来自 lead 说明与后端实测。`GET /api/wallet` 的 `ledger_total` 实际是「账本重算余额」（`recompute_balance`），不是流水条数，前端按对账余额展示。
+13. **订单创建/确认响应不带 `user_email`**：列表查询才 JOIN 用户邮箱；前端在创建/确认成功后重新拉取当前页，保证邮箱列完整。
+14. **账本流水字段**：后端返回 `{id,delta,type,ref,note,created_at}`（无 `balance_after`）；用户端流水表已按真实字段渲染。订单无取消/删除接口，页面只提供创建与确认；对账接口（reconcile）已封装但页面未暴露按钮。

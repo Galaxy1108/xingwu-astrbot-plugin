@@ -1,15 +1,21 @@
 import { api } from './client'
 import type {
   AdminBot,
+  AdminLedgerAdjustPayload,
+  AdminLedgerAdjustResult,
+  AdminOrder,
+  AdminOrderConfirmResult,
+  AdminOrderCreatePayload,
+  AdminOrderCreateResult,
   AdminUser,
   AdminUserPatch,
+  AdminUserQuery,
   AuditLog,
   AuditQuery,
   Bot,
   PageResult,
   Template,
   TemplateInput,
-  AdminUserQuery,
 } from '@/types'
 
 export function listAdminTemplates(): Promise<{ items: Template[] }> {
@@ -63,4 +69,40 @@ export function listAdminAudit(params: AuditQuery = {}): Promise<PageResult<Audi
     actor_id: params.actor_id,
     target_id: params.target_id,
   })
+}
+
+// ------------------------------------------------------------------ M3 手动额度
+export function listAdminOrders(
+  params: { page?: number; page_size?: number } = {},
+): Promise<PageResult<AdminOrder>> {
+  return api.get<PageResult<AdminOrder>>('/admin/orders', {
+    page: params.page,
+    page_size: params.page_size,
+  })
+}
+
+export function createAdminOrder(
+  payload: AdminOrderCreatePayload,
+): Promise<AdminOrderCreateResult> {
+  return api.post<AdminOrderCreateResult>('/admin/orders', payload)
+}
+
+export function confirmAdminOrder(orderId: string): Promise<AdminOrderConfirmResult> {
+  return api.post<AdminOrderConfirmResult>(
+    `/admin/orders/${encodeURIComponent(orderId)}/confirm`,
+  )
+}
+
+export function adjustAdminLedger(
+  payload: AdminLedgerAdjustPayload,
+): Promise<AdminLedgerAdjustResult> {
+  return api.post<AdminLedgerAdjustResult>('/admin/ledger', payload)
+}
+
+export function reconcileAdminWallet(
+  userId: string,
+): Promise<{ user_id: string; balance: number }> {
+  return api.post<{ user_id: string; balance: number }>(
+    `/admin/users/${encodeURIComponent(userId)}/wallet/reconcile`,
+  )
 }

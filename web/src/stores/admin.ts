@@ -4,6 +4,12 @@ import * as adminApi from '@/api/admin'
 import { toApiError, type ApiError } from '@/api/client'
 import type {
   AdminBot,
+  AdminLedgerAdjustPayload,
+  AdminLedgerAdjustResult,
+  AdminOrder,
+  AdminOrderConfirmResult,
+  AdminOrderCreatePayload,
+  AdminOrderCreateResult,
   AdminUser,
   AdminUserQuery,
   AuditLog,
@@ -28,6 +34,13 @@ export const useAdminStore = defineStore('admin', () => {
   const bots = ref<AdminBot[]>([])
   const botsLoading = ref(false)
   const botsError = ref<ApiError | null>(null)
+
+  const orders = ref<AdminOrder[]>([])
+  const ordersTotal = ref(0)
+  const ordersPage = ref(1)
+  const ordersPageSize = ref(20)
+  const ordersLoading = ref(false)
+  const ordersError = ref<ApiError | null>(null)
 
   const audit = ref<AuditLog[]>([])
   const auditTotal = ref(0)
@@ -134,6 +147,43 @@ export const useAdminStore = defineStore('admin', () => {
     }
   }
 
+  async function loadOrders(
+    query: { page?: number; page_size?: number } = {},
+  ): Promise<PageResult<AdminOrder>> {
+    ordersLoading.value = true
+    ordersError.value = null
+    try {
+      const result = await adminApi.listAdminOrders(query)
+      orders.value = result.items ?? []
+      ordersTotal.value = result.total ?? 0
+      ordersPage.value = result.page ?? query.page ?? 1
+      ordersPageSize.value = result.page_size ?? query.page_size ?? 20
+      return result
+    } catch (err) {
+      ordersError.value = toApiError(err)
+      throw ordersError.value
+    } finally {
+      ordersLoading.value = false
+    }
+  }
+
+  async function createOrder(payload: AdminOrderCreatePayload): Promise<AdminOrderCreateResult> {
+    return adminApi.createAdminOrder(payload)
+  }
+
+  async function confirmOrder(orderId: string): Promise<AdminOrderConfirmResult> {
+    const result = await adminApi.confirmAdminOrder(orderId)
+    const index = orders.value.findIndex((order) => order.id === orderId)
+    if (index >= 0) orders.value.splice(index, 1, { ...orders.value[index], ...result.order })
+    return result
+  }
+
+  async function adjustLedger(
+    payload: AdminLedgerAdjustPayload,
+  ): Promise<AdminLedgerAdjustResult> {
+    return adminApi.adjustAdminLedger(payload)
+  }
+
   return {
     templates,
     templatesLoading,
@@ -147,6 +197,12 @@ export const useAdminStore = defineStore('admin', () => {
     bots,
     botsLoading,
     botsError,
+    orders,
+    ordersTotal,
+    ordersPage,
+    ordersPageSize,
+    ordersLoading,
+    ordersError,
     audit,
     auditTotal,
     auditPage,
@@ -162,5 +218,9 @@ export const useAdminStore = defineStore('admin', () => {
     loadBots,
     disableBot,
     loadAudit,
+    loadOrders,
+    createOrder,
+    confirmOrder,
+    adjustLedger,
   }
 })
