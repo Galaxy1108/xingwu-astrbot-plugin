@@ -167,10 +167,17 @@ async def admin_create_invite(request: web.Request) -> web.Response:
     admin = require_admin(request)
     body = await request.json()
     container = container_of(request)
+    try:
+        max_uses = int(body.get("max_uses") or 1)
+        ttl_hours = body.get("ttl_hours")
+        if ttl_hours is not None:
+            ttl_hours = int(ttl_hours)
+    except (TypeError, ValueError):
+        raise ValidationError("max_uses / ttl_hours 必须是整数") from None
     invite = container.invites.create(
         created_by=admin["id"],
-        max_uses=int(body.get("max_uses") or 1),
-        ttl_hours=body.get("ttl_hours"),
+        max_uses=max_uses,
+        ttl_hours=ttl_hours,
         note=str(body.get("note") or ""),
     )
     container.audit.log(

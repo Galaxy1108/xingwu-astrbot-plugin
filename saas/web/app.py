@@ -196,10 +196,18 @@ async def console_static(request: web.Request) -> web.StreamResponse:
     if dist.resolve() not in candidate.parents and candidate != dist.resolve():
         raise web.HTTPNotFound()
     if tail and candidate.is_file():
-        return web.FileResponse(candidate)
+        response = web.FileResponse(candidate)
+        # Vite emits content-hashed assets; index.html must never be cached.
+        if tail.startswith("assets/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        else:
+            response.headers["Cache-Control"] = "no-cache"
+        return response
     index = dist / "index.html"
     if index.exists():
-        return web.FileResponse(index)
+        response = web.FileResponse(index)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
     raise web.HTTPNotFound()
 
 

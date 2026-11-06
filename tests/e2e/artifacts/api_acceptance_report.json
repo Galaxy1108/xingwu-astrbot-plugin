@@ -1,0 +1,137 @@
+{
+  "generated_at": 1793983814,
+  "base_url": "http://127.0.0.1:6180",
+  "data_dir": "/home/int_256t/Documents/Projects/astrbot-saas-plugin/devdata",
+  "summary": {
+    "PASS": 24,
+    "FAIL": 1,
+    "SKIP": 0
+  },
+  "items": [
+    {
+      "status": "PASS",
+      "name": "A0 管理员 OTP 登录 + /api/me",
+      "detail": "admin=admin@example.com role=admin version=0.1.0（0.0s）"
+    },
+    {
+      "status": "PASS",
+      "name": "A1 邀请码一次性：第二次注册 410 invite_exhausted",
+      "detail": "邀请码 INV-Q25W… 第二次注册 -> 410 invite_exhausted, used_count=1（0.0s）"
+    },
+    {
+      "status": "PASS",
+      "name": "A2 邀请码并发：恰好一个成功，其余 410",
+      "detail": "并发 verify：[200, 410]，仅一个用户创建，used_count=1（0.0s）"
+    },
+    {
+      "status": "PASS",
+      "name": "A3 OTP 重放被拒绝（401 otp_invalid）",
+      "detail": "同一 OTP 第二次校验 -> 401 otp_invalid（0.0s）"
+    },
+    {
+      "status": "PASS",
+      "name": "B1 非法平台创建失败且无残留",
+      "detail": "platform=telegram -> 400 validation_error(field=platform)，无 bot/记忆库残留（0.0s）"
+    },
+    {
+      "status": "PASS",
+      "name": "B2 非法名称创建失败且无残留",
+      "detail": "空名称/33 字符 -> 400 validation_error(field=name)，无残留（0.0s）"
+    },
+    {
+      "status": "PASS",
+      "name": "B3 已下架模板创建失败且无残留",
+      "detail": "已下架模板 t_d7865016faf26470 -> 409 template_disabled，无残留（0.0s）"
+    },
+    {
+      "status": "PASS",
+      "name": "B4 配额超限创建失败且无残留",
+      "detail": "max_bots=0 -> 409 quota_exceeded，无残留（0.0s）"
+    },
+    {
+      "status": "FAIL",
+      "name": "B5 中段失败全量回滚（注入 create_persona/config/route/platform）",
+      "detail": "回滚注入服务器启动失败：\n已生成新的 root KEK：/tmp/saas-qa-rollback-7tjedixy/keys/root_kek.bin（请离线备份；丢失将无法解密任何数据）\n[seed] 管理员账号已创建：admin@example.com（OTP 登录，无需密码）"
+    },
+    {
+      "status": "PASS",
+      "name": "C1 创建 Bot -> pending_qr + 记忆库文件",
+      "detail": "bot=b_8c2f1e8915fc45a390ec3c644e10b3b2 status=pending_qr memory=memory/b_8c2f1e8915fc45a390ec3c644e10b3b2.db（文件已生成）（0.0s）"
+    },
+    {
+      "status": "PASS",
+      "name": "C2 扫码 start：TTL≈60s、间隔 2s、PNG 二维码",
+      "detail": "status=pending refresh_count=0 interval=2 ttl=60s image=png-data-url（0.0s）"
+    },
+    {
+      "status": "PASS",
+      "name": "C3 同一 Bot 重复 start -> 409 qr_session_exists",
+      "detail": "同一 Bot 重复 start -> 409 qr_session_exists（0.0s）"
+    },
+    {
+      "status": "PASS",
+      "name": "C4 连续 4 次过期：刷新 3 次后 expired",
+      "detail": "expire×4 -> status=['pending', 'pending', 'pending', 'expired'] refresh_count=[1, 2, 3, 4]（第 4 次 expired，不再自动刷新）（0.0s）"
+    },
+    {
+      "status": "PASS",
+      "name": "C5 重新 start、未扫码 finalize 409、扫码后 finalize -> ready",
+      "detail": "重新 start -> scanned -> created -> finalize -> status=ready enabled=true bound=true platform=weixin_oc（0.0s）"
+    },
+    {
+      "status": "PASS",
+      "name": "C6 删除 Bot：名称确认、DB/绑定/记忆库清理",
+      "detail": "错误名称 400(confirm_name)；正确名称删除 200，DB/绑定/记忆库(+wal/shm)/列表均清理（0.0s）"
+    },
+    {
+      "status": "PASS",
+      "name": "C7 取消待扫码 Bot 无残留",
+      "detail": "待扫码 Bot 直接删除 -> 记忆库文件/会话均清理，无残留（0.0s）"
+    },
+    {
+      "status": "PASS",
+      "name": "D1 匿名访问 -> 401 unauthorized",
+      "detail": "匿名 GET /api/bots、/api/me、POST /api/bots -> 401 unauthorized（0.0s）"
+    },
+    {
+      "status": "PASS",
+      "name": "D2 缺少 CSRF 头的写请求 -> 403 csrf_invalid",
+      "detail": "已登录但缺少 X-CSRF-Token -> 403 csrf_invalid（0.0s）"
+    },
+    {
+      "status": "PASS",
+      "name": "D3 错误 CSRF token -> 403 csrf_invalid",
+      "detail": "错误 X-CSRF-Token -> 403 csrf_invalid（0.0s）"
+    },
+    {
+      "status": "PASS",
+      "name": "D4 普通用户访问管理端 -> 403 forbidden",
+      "detail": "普通用户 GET /api/admin/users、/api/admin/audit -> 403 forbidden（0.0s）"
+    },
+    {
+      "status": "PASS",
+      "name": "D5 禁用用户：会话立即 401 + 其 Bot 停用",
+      "detail": "禁用用户 qa-disabled-1793983813-lr9h8g@example.com -> 会话立即 401；其 ready Bot b_7114789b67a242ee8f227d1348f0aba2 变为 disabled（0.0s）"
+    },
+    {
+      "status": "PASS",
+      "name": "F1 管理端用户列表可见",
+      "detail": "用户列表可见 qa-main-1793983768-oqne1i@example.com，bot_count=0 max_bots=3（0.0s）"
+    },
+    {
+      "status": "PASS",
+      "name": "F2 管理端 Bot 列表可见（含 owner_email）",
+      "detail": "Bot 列表 total=2，owner_email 示例=qa-disabled-1793983813-lr9h8g@example.com（0.0s）"
+    },
+    {
+      "status": "PASS",
+      "name": "F3 审计列表可见且包含关键动作",
+      "detail": "审计 total=45，包含 ['auth.login', 'bot.created', 'bot.deleted', 'user.status_changed']（0.0s）"
+    },
+    {
+      "status": "PASS",
+      "name": "F4 管理员不能关闭加密（403）",
+      "detail": "PUT encryption enabled=false -> 403 forbidden；enabled=true -> 200，状态仍为加密（0.0s）"
+    }
+  ]
+}

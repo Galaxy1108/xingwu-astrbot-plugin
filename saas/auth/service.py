@@ -111,7 +111,6 @@ class AuthService:
             target_id=user["id"] if user else email,
             ip=ip,
         )
-        result["registered"] = user is not None
         return result
 
     def verify_otp(
@@ -268,13 +267,16 @@ class AuthService:
         if user is None:
             raise AppError("用户不存在", code="not_found", status=404)
         current = self.quota_for(user_id)
-        values = {
-            "max_bots": int(quota.get("max_bots", current["max_bots"])),
-            "monthly_tokens": int(
-                quota.get("monthly_tokens", current["monthly_tokens"])
-            ),
-            "max_memories": int(quota.get("max_memories", current["max_memories"])),
-        }
+        try:
+            values = {
+                "max_bots": int(quota.get("max_bots", current["max_bots"])),
+                "monthly_tokens": int(
+                    quota.get("monthly_tokens", current["monthly_tokens"])
+                ),
+                "max_memories": int(quota.get("max_memories", current["max_memories"])),
+            }
+        except (TypeError, ValueError):
+            raise ValidationError("配额必须是整数", field="quota") from None
         if values["max_bots"] < 0 or values["max_memories"] < 0:
             raise ValidationError("配额不能为负数", field="quota")
         self.db.execute(
