@@ -57,14 +57,53 @@
 - 真实实现直接复用 AstrBot `weixin_oc` / `qq_official` 的 `login_registration` 模块；
   `FakeAstrBot` 提供确定性替身（测试/演示）。
 
-## 6. 记忆库（M1 范围）
+## 6. 记忆模块（M2，已实现后端）
 
-- 每 Bot 一个 `data/memory/<bot_id>.db`，SQLCipher + WAL；
-  打开参数按文档 §6.5：`cipher_page_size=4096`、`kdf_iter=256000`、`HMAC_SHA512`、`PBKDF2_HMAC_SHA512`、`temp_store=MEMORY`。
-- 建库后校验文件头不是 `SQLite format 3\0`；测试用普通 `sqlite3` 打开会抛 `DatabaseError`。
-- 依赖 `sqlcipher3-binary`（已验证 cp312 wheel）。若运行环境缺 SQLCipher，`MemoryStorage` 会**显式报错/日志降级**，
-  不会静默写明文库。
-- M1 只实现建库/删库/打开；`repository/retrieval/tools/migration` 留给 M2，目录已按 §4.5.1 建好骨架。
+### 6.1 分层（按交接文档 §4.5.1）
+
+```
+saas/memory/
+├─ models.py           纯 dataclass：Memory/MemoryDraft/RecallHit/Turn/RecallContext
+├─ ports.py            Protocol：MemoryRepository/Retriever/Extractor/EventBus/MemoryStore
+├─ service.py          MemoryService：去重→写入→索引→事件；召回编排
+├─ api.py              MemoryAPI：对 HTTP / LLM 工具的用例门面（不写 SQL）
+├─ storage/
+│  ├─ sqlcipher.py     建库/删库/连接 + 逐版本 schema 迁移
+│  ├─ repository.py    唯一写 SQL 的地方（SQLCipher 实现）
+│  ├─ in_memory.py     契约测试用同行为实现
+│  └─ schema/          001_init / 002_fts / 003_fts_standalone
+├─ retrieval/          fts.py（BM25 候选）+ rules.py（0.5/0.3/0.2 重排）+ vector.py 预留
+├─ extraction/         command.py（/记住 ... #tag kind:event importance:4）+ llm.py 预留
+├─ tools/llm_tools.py  memory_remember / memory_recall / memory_forget 的 schema + dispatch
+├─ migration/from_angel.py  只读导入 + 报告（成功/跳过/失败，幂等）
+└─ store.py            SQLCipherMemoryStore（LRU ≤64 连接）/ InMemoryStore
+```
+
+### 6.2 存储与索引
+
+- 每 Bot 一个 SQLCipher 文件（`data/memory/<bot_id>.db`），WAL；建库后校验文件头不是
+  `SQLite format 3\0`；普通 sqlite3 打开报 `DatabaseError`（有测试）。
+- **FTS 采用 standalone 索引表**（不是 external content）：因为 tags 在另一张表，
+  external-content 的触发器在更新时用“新 tags”删除“旧索引行”会导致索引损坏
+  （实测 `database disk image is malformed`）。
+- **中文检索**：unicode61 不分词，因此入库/查询都做预分词（CJK 单字 + 相邻 bigram、ASCII 整词），
+  查询优先用 bigram（选择性高）；10k 条 FTS 查询实测 13–21ms（目标 <20ms）。
+- 检索管道：FTS 前 50 → `RulesReranker`（0.5×BM25 归一 + 0.3×importance + 0.2×新近度，置顶加 10）
+  → token 预算裁剪（默认 800）→ 注入格式 `[记忆]\n- (偏好) ... (2026-11-02)`。
+- 召回后异步更新 `last_recalled_at/recall_count`（当前同步写，负载低）。
+- 去重：内容去空白/标点后 24h 内相同 → 返回已有记录（`duplicate=true`），不新增。
+- 写路径：LLM 工具 / `/记住` 命令 → `MemoryService.remember()`；HTTP 只提供管理（列/查/改/删/搜索/导出）。
+- 删除 Bot：先 `memory_store.close(bot_id)` 关连接，再删 `.db`/`-wal`/`-shm`（测试断言连接已释放）。
+- 降级：环境无 SQLCipher 时 `MemoryStorage` 显式报错并记录降级日志，不静默写明文。
+
+### 6.3 测试与指标
+
+- 契约测试：同一组用例分别跑 `InMemoryRepository` 与 `SqlCipherRepository`（增删改查、筛选、分页、
+  FTS、touch、去重）。
+- 集成：真实 SQLCipher 文件不可被普通 sqlite3 打开；跨 Bot 不串；删 Bot 清理。
+- 性能：10,000 条记忆、查询 “西湖 咖啡” → 13.4ms（`pytest -s` 打印）。
+- 导入：`saas/memory/migration/from_angel.py` 只读源库，`judgment→content`、`tags` 拆表、保留 `created_at`，
+  幂等；HTTP import 仍 501（M2 走 CLI）。
 
 ## 7. 前端（web/）
 
@@ -78,7 +117,7 @@
 
 | 能力 | 现状 |
 |---|---|
-| 记忆 CRUD/FTS/LLM 工具/导入 | 接口返回空列表或 501，M2 实现 |
+| 记忆 CRUD/FTS/LLM 工具/导入 | 后端已完成（M2）；前端记忆页在 M2 收尾 |
 | 加密开关（关闭=全部解密） | `/api/me/encryption` 只读；M3 实现回填任务 |
 | 管理员内容查看 / 内容访问留痕 | 数据表与路由骨架已就位（M3） |
 | 手动充值/账本 | 表结构就位；`/api/admin/orders` → 501，M3 实现 |
