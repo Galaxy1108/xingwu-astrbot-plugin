@@ -3,13 +3,21 @@ import { useAuthStore } from '@/stores/auth'
 import { installGuards } from './guards'
 import ConsoleLayout from '@/layouts/ConsoleLayout.vue'
 import AdminLayout from '@/layouts/AdminLayout.vue'
+import AuthLayout from '@/layouts/AuthLayout.vue'
 
 const routes: RouteRecordRaw[] = [
   {
     path: '/login',
-    name: 'login',
-    component: () => import('@/views/auth/LoginView.vue'),
-    meta: { title: '登录', guestOnly: true },
+    component: AuthLayout,
+    meta: { guestOnly: true },
+    children: [
+      {
+        path: '',
+        name: 'login',
+        component: () => import('@/views/auth/LoginView.vue'),
+        meta: { title: '登录', guestOnly: true },
+      },
+    ],
   },
   {
     path: '/',

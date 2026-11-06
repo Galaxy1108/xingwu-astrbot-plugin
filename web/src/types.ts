@@ -236,6 +236,7 @@ export interface EncryptionStatus {
 export interface VersionInfo {
   version: string
   build?: string
+  dev_mode?: boolean
 }
 
 export interface PageQuery {
