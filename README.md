@@ -6,7 +6,7 @@
 
 > 当前进度：**M1（账号 + 建 Bot）已完成并通过独立验收**；**M2 记忆模块后端已完成**（分层、SQLCipher、
 > FTS 检索、LLM 工具、angel_memory 导入 CLI、HTTP 管理接口；前端记忆页在 M2 收尾中）。
-> M3（隐私加密开关 + 管理端内容查看/额度）接口骨架已就位。
+> M3 切片已实现：手动额度订单 + append-only 账本（幂等）与用户余额/流水；隐私加密开关与管理端内容查看仍待实现。
 
 ## 快速开始（独立开发模式，无需启动 AstrBot）
 
@@ -60,6 +60,7 @@ saas/
 ├─ crypto.py             Root KEK → 租户密钥（信封）→ 每 Bot 子密钥；ENC1 信封
 ├─ auth/                 邀请、OTP、会话/CSRF、租户密钥、账号用例
 ├─ templates.py          预设模板（创建快照）
+├─ billing.py            手动额度订单 + append-only 账本（幂等、可对账）
 ├─ bots.py               Bot 生命周期（创建/回滚/启停/改名/删除）
 ├─ qr.py                 扫码状态机（60s TTL、≤3 自动刷新、5min 空闲回收）
 ├─ memory/               自研记忆模块：models/ports/service/api，SQLCipher repo + InMemory 契约双实现，

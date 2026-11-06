@@ -255,3 +255,18 @@ F3 修订说明：首版断言“最近 100 条审计里必须有 `auth.login`�
 - 向量检索（第二期预留 `retrieval/vector.py`）。
 - `from_angel.py` 的 HTTP 入口（CLI 已实现，未接上传）。
 - 记忆衰减/遗忘策略、用户画像/摘要（后续里程碑）。
+
+---
+
+# 附录二：M3 切片验收（手动额度 + 账本）
+
+| 验收点 | 证据 |
+|---|---|
+| 建单 → 确认 → 入账 | `tests/test_billing.py`；API smoke：201 建单 → confirm 200 `paid` → 余额 +credits |
+| 重复确认不重复入账 | `confirm_order` 返回 `already_paid=true`；`ledger.idem_key=order:{id}` 唯一约束兜底 |
+| 外部单号防重 | `external_ref` 唯一；重复建单返回 `idempotent=true` 同一订单 |
+| 手动加/扣幂等 | `POST /api/admin/ledger` 带 `idem_key` 重复提交返回同一账本行，余额不变 |
+| 余额可重算 | `recompute_balance()` = `SUM(ledger.delta)`；`reconcile` 修复被篡改的缓存余额（有测试） |
+| 权限 | 普通用户调用 `/api/admin/orders|ledger` → 403；用户只能读自己的余额/流水 |
+| 审计 | `order.created` / `order.confirmed` / `wallet.adjusted` 写入 `audit_logs` |
+| 回归 | 全量 pytest 87 passed；M1 API 验收 25/25 不受影响 |
