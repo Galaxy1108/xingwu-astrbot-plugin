@@ -121,7 +121,7 @@
             "created_at": 0, "encryption": { "enabled": true, "state": "encrypted" } },
   "csrf_token": "…",
   "limits": { "max_bots": 3, "max_memories": 2000, "monthly_tokens": 1000000 },
-  "version": "0.1.0"
+  "version": "0.3.0"
 }
 ```
 
@@ -313,7 +313,7 @@ AuditLog：`{ "id": 1, "actor_id", "actor_role", "action", "target_type", "targe
 
 ## 6. 其他
 
-- `GET /api/version` → `{ "version": "0.1.0", "build": "…" }`
+- `GET /api/version` → `{ "version": "0.3.0", "build": "…" }`
 - `GET /healthz` → `{ "ok": true }`
 - 静态：`GET /console/*` → `web/dist`；找不到路径回退 `index.html`（history 路由）。
 - `GET /` → 302 `/console/`。
