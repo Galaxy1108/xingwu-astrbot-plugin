@@ -51,8 +51,6 @@
               <th>用户</th>
               <th>金额</th>
               <th>点数</th>
-              <th>来源</th>
-              <th>外部单号</th>
               <th>状态</th>
               <th class="nowrap">创建时间</th>
               <th class="nowrap">到账时间</th>
@@ -61,7 +59,12 @@
           </thead>
           <tbody>
             <tr v-for="order in admin.orders" :key="order.id" data-testid="order-row">
-              <td class="text-mono order-id">{{ order.id }}</td>
+              <td class="order-cell">
+                <div class="text-mono order-id">{{ order.id }}</div>
+                <div v-if="order.external_ref" class="text-mono text-muted order-ref" :title="order.external_ref">
+                  {{ order.external_ref }}
+                </div>
+              </td>
               <td>
                 <div class="user-email" :title="order.user_email || ''">
                   {{ order.user_email || '—' }}
@@ -70,10 +73,6 @@
               </td>
               <td class="nowrap">{{ money(order.amount_cny) }}</td>
               <td class="nowrap credits">+{{ formatNumber(order.credits) }}</td>
-              <td class="nowrap">{{ sourceLabel(order.source) }}</td>
-              <td class="text-mono external-ref" :title="order.external_ref || ''">
-                {{ order.external_ref || '—' }}
-              </td>
               <td>
                 <v-chip
                   :color="order.status === 'paid' ? 'success' : 'warning'"
@@ -520,11 +519,6 @@ async function submitAdjust(): Promise<void> {
 function money(value: number): string {
   return value > 0 ? `¥${value.toFixed(2)}` : '—'
 }
-
-function sourceLabel(source: string): string {
-  if (source === 'manual') return '手动'
-  return source || '—'
-}
 </script>
 
 <style scoped>
@@ -554,11 +548,23 @@ function sourceLabel(source: string): string {
 }
 
 .orders-table {
-  min-width: 1080px;
+  min-width: 980px;
+}
+
+.order-cell {
+  max-width: 190px;
 }
 
 .order-id {
   font-size: 0.76rem;
+}
+
+.order-ref {
+  font-size: 0.7rem;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .user-email {
@@ -577,14 +583,6 @@ function sourceLabel(source: string): string {
 .credits {
   color: #2e7d32;
   font-weight: 600;
-}
-
-.external-ref {
-  max-width: 180px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.76rem;
 }
 
 .nowrap {
