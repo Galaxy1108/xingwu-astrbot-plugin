@@ -214,3 +214,44 @@ F3 修订说明：首版断言“最近 100 条审计里必须有 `auth.login`�
 | `tests/e2e/artifacts/test-results-qa/` | 失败时的 trace/截图目录（本轮无失败，目录可能为空） |
 
 > `tests/e2e/artifacts/`、`tests/e2e/node_modules/` 均已 gitignore，不进入提交。
+
+---
+
+# 附录：M2 记忆模块验收（Lead 追加，2026-11-07 01:10–01:30）
+
+> M1 验收完成后利用剩余时间实现 M2 记忆模块；以下为增量验收记录。
+> 范围：分层骨架、SQLCipher 库、FTS 检索、去重、HTTP 管理接口、LLM 工具、前端记忆页。
+
+## A. 自动化
+
+| 项 | 命令 | 结果 |
+|---|---|---|
+| 后端（含记忆） | `.venv/bin/python -m pytest -q` | **80 passed** |
+| 前端单测 | `cd web && npm run test` | **32 passed**（4 文件） |
+| 前端构建 | `cd web && npm run build` | 通过（vue-tsc + vite） |
+| API 回归 | `python tests/e2e/api_acceptance.py` | **25/25 PASS**（M2 改动未破坏 M1） |
+| 浏览器 E2E | `cd tests/e2e && npx playwright test` | **10 passed**（M1 9 + M2 记忆页 1） |
+| 真实 AstrBot | 启动 AstrBot 4.29.0-beta.1（6190） | 插件加载、无 ERROR、`/console/` 200、`/api/healthz` ok |
+
+## B. 记忆模块关键验收
+
+| 验收点 | 证据 |
+|---|---|
+| 契约双实现行为一致 | `tests/test_memory.py` 参数化跑 `InMemoryRepository` / `SqlCipherRepository`（增删改查/筛选/分页/FTS/touch/去重/tag count） |
+| 记忆库为密文 | 文件头非 `SQLite format 3\0`；普通 `sqlite3` 打开抛 `DatabaseError` |
+| 跨 Bot 不串 | Bot A 写入后 Bot B 列表/召回为空；HTTP 跨租户 404 |
+| 删 Bot 清理连接与文件 | `memory_store.close(bot_id)` 后 `.db/-wal/-shm` 全部删除，缓存中无连接 |
+| 去重 | 归一化内容 24h 内重复 → `duplicate=true` 不新增；超出窗口可再次写入 |
+| 检索排序 | 置顶优先；`0.5*BM25 + 0.3*importance + 0.2*recency`；kind 过滤生效 |
+| 性能 | 10,000 条记忆 FTS 查询 **13.4ms**（目标 <20ms） |
+| 中文检索 | CJK 单字+bigram 预分词；`杭州`/`西湖 咖啡`/`独立开发` 均可命中 |
+| HTTP 管理 | 列表/详情/PATCH/DELETE/搜索/导出；`tag` 筛选 `total` 按标签计数（修复前端发现的问题） |
+| LLM 工具 | `memory_remember/recall/forget` 注册进 AstrBot；UMO 前缀非 `b_` 时 fail-closed 拒绝 |
+| 前端记忆页 | `/bots/:id/memory`：分页/kind/tag/关键字、编辑 drawer、删除确认、导出、检索预览；E2E 通过 |
+
+## C. M2 未覆盖
+
+- 自动记忆（`LlmExtractor` 默认关，仅命令/LLM 工具写入）。
+- 向量检索（第二期预留 `retrieval/vector.py`）。
+- `from_angel.py` 的 HTTP 入口（CLI 已实现，未接上传）。
+- 记忆衰减/遗忘策略、用户画像/摘要（后续里程碑）。
