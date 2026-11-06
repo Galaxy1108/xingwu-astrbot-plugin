@@ -23,8 +23,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import queue
 import random
-import select
 import shutil
 import socket
 import sqlite3
@@ -429,23 +429,35 @@ def start_harness(env: Env, port: int, data_dir: Path) -> tuple[subprocess.Popen
         bufsize=1,
     )
     assert process.stdout is not None
-    deadline = time.time() + 45
+    line_queue: queue.Queue[str | None] = queue.Queue()
     lines: list[str] = []
+
+    def _reader() -> None:
+        try:
+            for line in process.stdout:  # type: ignore[union-attr]
+                line_queue.put(line.rstrip())
+        except Exception:  # noqa: BLE001
+            pass
+        finally:
+            line_queue.put(None)
+
+    threading.Thread(target=_reader, daemon=True).start()
+    deadline = time.time() + 45
     info: dict[str, Any] | None = None
     while time.time() < deadline:
-        ready, _, _ = select.select([process.stdout], [], [], 1.0)
-        if not ready:
+        remaining = max(0.2, deadline - time.time())
+        try:
+            line = line_queue.get(timeout=min(1.0, remaining))
+        except queue.Empty:
             if process.poll() is not None:
                 break
             continue
-        line = process.stdout.readline()
-        if not line:
+        if line is None:
             break
-        lines.append(line.rstrip())
-        stripped = line.strip()
-        if stripped.startswith("{"):
+        lines.append(line)
+        if line.strip().startswith("{"):
             try:
-                parsed = json.loads(stripped)
+                parsed = json.loads(line)
             except ValueError:
                 continue
             if parsed.get("ready"):
@@ -457,18 +469,17 @@ def start_harness(env: Env, port: int, data_dir: Path) -> tuple[subprocess.Popen
             process.wait(timeout=5)
         except subprocess.TimeoutExpired:
             process.kill()
-        raise CheckFailure(
-            "回滚注入服务器启动失败：\n" + "\n".join(lines[-20:])
-        )
-
-    def _drain() -> None:
-        try:
-            for _ in process.stdout:  # type: ignore[union-attr]
-                pass
-        except Exception:  # noqa: BLE001
-            pass
-
-    threading.Thread(target=_drain, daemon=True).start()
+        # drain whatever the process printed before dying (tracebacks included)
+        end = time.time() + 1.0
+        while time.time() < end:
+            try:
+                line = line_queue.get(timeout=0.2)
+            except queue.Empty:
+                break
+            if line is None:
+                break
+            lines.append(line)
+        raise CheckFailure("回滚注入服务器启动失败：\n" + "\n".join(lines[-20:]))
     return process, info
 
 
@@ -1028,13 +1039,35 @@ def main() -> int:
         return f"Bot 列表 total={result.data.get('total')}，owner_email 示例={sample.get('owner_email')}"
 
     def f3() -> str:
-        result = admin.get("/api/admin/audit?page_size=100")
-        require(result.status == 200, f"审计列表失败：{result.describe()}")
-        actions = {item["action"] for item in result.data.get("items") or []}
-        required = {"bot.created", "bot.deleted", "user.status_changed", "auth.login"}
-        missing = required - actions
-        require(not missing, f"审计缺少动作 {missing}，现有 {sorted(actions)}")
-        return f"审计 total={result.data.get('total')}，包含 {sorted(required & actions)}"
+        # 按 action 精确过滤，避免“最近 N 条”分页把较早的管理员登录截掉；
+        # 新用户首次登录记 auth.register（产品预期），已有用户登录记 auth.login，
+        # 因此“登录/注册”事件接受二者之一。
+        def audit_total(action: str) -> int:
+            result = admin.get(f"/api/admin/audit?action={action}&page_size=100")
+            require(result.status == 200, f"审计过滤 {action} 失败：{result.describe()}")
+            return int(result.data.get("total", 0))
+
+        listed = admin.get("/api/admin/audit?page_size=5")
+        require(listed.status == 200, f"审计列表失败：{listed.describe()}")
+        require(bool(listed.data.get("items")), "审计列表第一页为空")
+        counts = {
+            action: audit_total(action)
+            for action in (
+                "bot.created",
+                "bot.deleted",
+                "user.status_changed",
+                "auth.login",
+                "auth.register",
+            )
+        }
+        require(counts["bot.created"] > 0, f"审计缺少 bot.created：{counts}")
+        require(counts["bot.deleted"] > 0, f"审计缺少 bot.deleted：{counts}")
+        require(counts["user.status_changed"] > 0, f"审计缺少 user.status_changed：{counts}")
+        require(
+            counts["auth.login"] > 0 or counts["auth.register"] > 0,
+            f"审计缺少登录/注册事件（auth.login 或 auth.register）：{counts}",
+        )
+        return f"审计按 action 过滤：{counts}；登录事件以 auth.login/auth.register 之一计"
 
     def f4() -> str:
         before = admin.get(f"/api/admin/users/{user_id}/encryption")
@@ -1075,7 +1108,7 @@ def main() -> int:
         ("D5 禁用用户：会话立即 401 + 其 Bot 停用", d5),
         ("F1 管理端用户列表可见", f1),
         ("F2 管理端 Bot 列表可见（含 owner_email）", f2),
-        ("F3 审计列表可见且包含关键动作", f3),
+        ("F3 审计列表可见（按 action 过滤：Bot 增删/用户状态/登录注册）", f3),
         ("F4 管理员不能关闭加密（403）", f4),
     ]
 

@@ -18,6 +18,9 @@
 { "ok": true, "data": { ... } }
 ```
 
+> 下文各接口示例展示的是 **`data` 字段的内容**（成功时），不再重复包 `ok/data`。
+> 列表接口统一返回 `{ items, total, page, page_size }`（无分页的列表只有 `items`）。
+
 失败（HTTP 状态码同步设置）：
 
 ```json
@@ -49,7 +52,7 @@
 | `invite_invalid` | 410 | 邀请码不存在/已作废 |
 | `invite_expired` | 410 | 邀请码过期 |
 | `invite_exhausted` | 410 | 邀请码已用尽（一次性） |
-| `otp_rate_limited` | 429 | 60s 内重复请求 OTP（`retry_after` 秒） |
+| `otp_rate_limited` | 429 | 60s 内重复请求 OTP（错误对象含 `retry_after` 秒） |
 | `otp_invalid` | 401 | 验证码错误 / 已使用 / 过期（不区分，防枚举） |
 | `otp_attempts_exceeded` | 429 | 校验次数超限，需重新获取 |
 | `template_disabled` | 409 | 模板已下架，不能新建 Bot |
@@ -262,9 +265,9 @@ Bot 对象：
   - 禁用立即撤销全部会话、停用其全部 Bot；写审计。
   - `200 { "user": { … } }`
 - `POST /api/admin/invites` `{ "max_uses": 1, "ttl_hours": 72 }` → `201 { "invite": { "code": "明文一次性返回", "expires_at": 0, "max_uses": 1 } }`
-- `GET /api/admin/invites` → `{ "items": [ { "code_prefix", "max_uses", "used_count", "expires_at", "revoked_at", "created_at" } ] }`
-- `DELETE /api/admin/invites/{code_prefix}` → 作废
-- `GET /api/admin/bots` → 全部 Bot `{ "items": [ { …Bot, "owner_email": "…" } ] }`
+- `GET /api/admin/invites` → `{ "items": [ { "code_hint", "max_uses", "used_count", "expires_at", "revoked_at", "created_at", "status" } ], ... }`
+- `DELETE /api/admin/invites/{code_hint}` → 作废（也接受完整邀请码）
+- `GET /api/admin/bots?page=&page_size=` → `{ "items": [ { …Bot, "owner_email": "…" } ], "total", "page", "page_size" }`
 - `POST /api/admin/bots/{id}/disable` → `{ "bot": Bot }`
 - `DELETE /api/admin/bots/{id}` `{ "confirm_name": "…" }` → `{ "deleted": true }`
 - `GET /api/admin/audit?page=&action=&actor_id=&target_id=` → `{ "items": [AuditLog], "total": 0, "page", "page_size" }`

@@ -234,6 +234,14 @@ class QrService:
     ) -> dict[str, Any]:
         bot = self.bots.get_for_user(user_id, bot_id)
         session = self._session_for(bot_id)
+        # The UI polls every 2s, but API clients may call finalize right after
+        # the scan confirmation. Catch up once so a successful scan is not lost.
+        if session is not None and session.status in {"pending", "scanned"}:
+            try:
+                await self.poll(user_id=user_id, bot_id=bot_id, ip=ip)
+            except AppError:
+                pass
+            session = self._session_for(bot_id)
         if session is None or session.status != "created" or not session.credentials:
             raise AppError(
                 "尚未完成扫码，不能接入", code="qr_not_ready", status=409

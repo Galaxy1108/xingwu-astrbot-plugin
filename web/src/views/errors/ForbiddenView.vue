@@ -10,7 +10,7 @@
         color="primary"
         prepend-icon="mdi-home-outline"
         data-testid="back-home"
-        @click="goHome"
+        to="/"
       >
         返回总览
       </v-btn>
@@ -23,14 +23,6 @@
 </template>
 
 <script setup lang="ts">
-import { useRouter } from 'vue-router'
-
-const router = useRouter()
-
-function goHome(): void {
-  void router.push('/')
-}
-
 function reload(): void {
   window.location.reload()
 }
