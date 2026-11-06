@@ -34,6 +34,7 @@ class AuthService:
         sessions: SessionService,
         keys: TenantKeyService,
         audit: AuditService,
+        mailer=None,
         clock: Clock | None = None,
     ) -> None:
         self.db = db
@@ -43,6 +44,7 @@ class AuthService:
         self.sessions = sessions
         self.keys = keys
         self.audit = audit
+        self.mailer = mailer
         self.clock = clock or SystemClock()
 
     # -- queries -------------------------------------------------------
@@ -103,6 +105,22 @@ class AuthService:
             else:
                 self.invites.verify(invite or "")
         result = self.otp.request(email, ip=ip)
+        code = str(result.pop("code", "") or "")
+        delivered = False
+        if code and self.mailer is not None:
+            try:
+                delivered = bool(
+                    self.mailer.send_otp(
+                        email,
+                        code,
+                        expires_minutes=max(1, self.settings.otp_ttl_seconds // 60),
+                    )
+                )
+            except Exception:  # noqa: BLE001
+                logger.exception("发送 OTP 邮件失败：%s", email)
+        if self.settings.otp_dev_echo:
+            result["dev_code"] = code
+        result["delivered"] = delivered
         self.audit.log(
             actor_id=user["id"] if user else "",
             actor_role=user["role"] if user else "",

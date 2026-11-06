@@ -14,6 +14,7 @@ from .config import Settings
 from .crypto import KeyManager
 from .db import Database
 from .fake_astrbot import FakeAstrBot
+from .mailer import build_mailer
 from .memory.api import MemoryAPI
 from .memory.extraction.command import CommandExtractor
 from .memory.service import LoggingEventBus, MemoryService
@@ -67,6 +68,7 @@ class Container:
             pepper=self.key_manager.derive_secret("session/v1"),
             clock=self.clock,
         )
+        self.mailer = build_mailer(settings)
         self.auth = AuthService(
             self.db,
             settings=settings,
@@ -75,6 +77,7 @@ class Container:
             sessions=self.sessions,
             keys=self.tenants,
             audit=self.audit,
+            mailer=self.mailer,
             clock=self.clock,
         )
         self.templates = TemplateService(self.db, self.clock)

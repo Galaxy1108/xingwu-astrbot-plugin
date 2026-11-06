@@ -33,7 +33,9 @@ cd web && npm install && npm run build && cd ..
 cd web && npm run test                             # 前端 Vitest
 ```
 
-开发模式下 `OTP` 接口会在响应里回显 `data.dev_code`（生产必须关闭 `otp_dev_echo`），
+OTP 邮件默认走日志降级（开发模式接口还会回显 `data.dev_code`）；生产在插件配置或环境变量里设置
+`SAAS_SMTP_HOST/PORT/USER/PASSWORD/FROM`（`SAAS_SMTP_SSL=true` 用于 465），响应中的 `delivered`
+会变为 `true`。生产必须关闭 `otp_dev_echo`。
 并提供仅 dev 可用的扫码模拟接口：`POST /api/dev/qr/{bot_id}/scanned|confirm|expire`。
 
 ## 接入真实 AstrBot
@@ -84,7 +86,7 @@ saas/
 
 ## 测试与验收
 
-- 后端：`tests/`（87 例）覆盖邀请一次性 410、OTP 规则、会话/禁用、CSRF、模板快照/下架、配额、创建回滚、跨租户 404、QR 60s/≤3 刷新/空闲回收、凭据加密、删除清理、SQLCipher 库不可被普通 sqlite3 打开；记忆模块（契约双实现、去重、召回排序、跨 Bot 隔离、10k FTS 13ms、删 Bot 清理连接/文件）。
+- 后端：`tests/`（90 例）覆盖邀请一次性 410、OTP 规则、会话/禁用、CSRF、模板快照/下架、配额、创建回滚、跨租户 404、QR 60s/≤3 刷新/空闲回收、凭据加密、删除清理、SQLCipher 库不可被普通 sqlite3 打开；记忆模块（契约双实现、去重、召回排序、跨 Bot 隔离、10k FTS 13ms、删 Bot 清理连接/文件）。
 - 前端：`web/` 内 Vitest（36 例：守卫 401/403、ConfirmDialog、API client CSRF、记忆 store、额度单）。
 - E2E：`tests/e2e/`（Playwright，使用系统 chromium；11 例：M1 登录/权限/扫码/管理端 + M2 记忆页 + M3 额度）；验收记录见 `docs/ACCEPTANCE.md`。
 

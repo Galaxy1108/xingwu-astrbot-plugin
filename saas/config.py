@@ -68,6 +68,15 @@ class Settings:
     allow_public_signup: bool = False
     allow_user_disable_encryption: bool = True
     allow_admin_disable_encryption: bool = False
+    # Mail (OTP delivery)
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    smtp_from_name: str = "AstrBot 控制台"
+    smtp_starttls: bool = True
+    smtp_ssl: bool = False
     # Dev / testing
     dev_mode: bool = False
     otp_dev_echo: bool = False
@@ -157,6 +166,14 @@ class Settings:
         settings.otp_dev_echo = _env_bool("SAAS_OTP_DEV_ECHO", settings.otp_dev_echo)
         settings.dev_mode = _env_bool("SAAS_DEV_MODE", settings.dev_mode)
         settings.admin_email = _env_str("SAAS_ADMIN_EMAIL", settings.admin_email)
+        settings.smtp_host = _env_str("SAAS_SMTP_HOST", settings.smtp_host)
+        settings.smtp_port = _env_int("SAAS_SMTP_PORT", settings.smtp_port)
+        settings.smtp_user = _env_str("SAAS_SMTP_USER", settings.smtp_user)
+        settings.smtp_password = _env_str("SAAS_SMTP_PASSWORD", settings.smtp_password)
+        settings.smtp_from = _env_str("SAAS_SMTP_FROM", settings.smtp_from)
+        settings.smtp_from_name = _env_str("SAAS_SMTP_FROM_NAME", settings.smtp_from_name)
+        settings.smtp_starttls = _env_bool("SAAS_SMTP_STARTTLS", settings.smtp_starttls)
+        settings.smtp_ssl = _env_bool("SAAS_SMTP_SSL", settings.smtp_ssl)
         settings.invite_ttl_hours = _env_int(
             "SAAS_INVITE_TTL_HOURS", settings.invite_ttl_hours
         )
@@ -201,6 +218,27 @@ class Settings:
         settings.qr_max_refreshes = int(
             val("qr_max_refreshes", settings.qr_max_refreshes)
         )
+        for attr in (
+            "smtp_host",
+            "smtp_user",
+            "smtp_password",
+            "smtp_from",
+            "smtp_from_name",
+        ):
+            raw = val(attr, None)
+            if raw is not None:
+                setattr(settings, attr, str(raw))
+        for attr in ("smtp_port",):
+            raw = val(attr, None)
+            if raw is not None:
+                try:
+                    setattr(settings, attr, int(raw))
+                except (TypeError, ValueError):
+                    pass
+        for attr in ("smtp_starttls", "smtp_ssl"):
+            raw = val(attr, None)
+            if raw is not None:
+                setattr(settings, attr, bool(raw))
         # Optional overrides from plugin config (never required).
         for attr in (
             "invite_ttl_hours",

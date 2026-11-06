@@ -55,5 +55,49 @@
     "description": "邀请码有效期（小时）",
     "type": "int",
     "default": 72
+  },
+  "smtp_host": {
+    "description": "SMTP 服务器（发送登录验证码）",
+    "type": "string",
+    "default": "",
+    "hint": "留空则使用开发日志模式（验证码只写日志/接口回显，生产必须配置）。也可用环境变量 SAAS_SMTP_HOST。"
+  },
+  "smtp_port": {
+    "description": "SMTP 端口",
+    "type": "int",
+    "default": 587,
+    "hint": "587=STARTTLS，465=SSL（配合 smtp_ssl）。"
+  },
+  "smtp_user": {
+    "description": "SMTP 用户名",
+    "type": "string",
+    "default": ""
+  },
+  "smtp_password": {
+    "description": "SMTP 密码/授权码",
+    "type": "string",
+    "default": "",
+    "hint": "建议用环境变量 SAAS_SMTP_PASSWORD，避免写入配置文件。"
+  },
+  "smtp_from": {
+    "description": "发件人邮箱",
+    "type": "string",
+    "default": "",
+    "hint": "留空则使用 smtp_user。"
+  },
+  "smtp_from_name": {
+    "description": "发件人显示名",
+    "type": "string",
+    "default": "AstrBot 控制台"
+  },
+  "smtp_starttls": {
+    "description": "使用 STARTTLS",
+    "type": "bool",
+    "default": true
+  },
+  "smtp_ssl": {
+    "description": "使用 SSL（465 端口）",
+    "type": "bool",
+    "default": false
   }
 }

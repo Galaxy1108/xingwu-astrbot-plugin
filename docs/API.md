@@ -75,8 +75,11 @@
 响应 `200`：
 
 ```json
-{ "sent": true, "resend_after": 60, "dev_code": "123456（仅开发开关打开时出现）" }
+{ "sent": true, "resend_after": 60, "delivered": true,
+  "dev_code": "123456（仅开发开关打开时出现）" }
 ```
+
+- `delivered=true` 表示已通过 SMTP 投递；未配置 SMTP 时为 `false`（验证码只写日志，开发用）。
 
 - 已存在用户：`invite` 忽略。
 - 新用户：`invite` 必填，校验失败返回 410。

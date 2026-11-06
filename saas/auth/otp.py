@@ -88,9 +88,8 @@ class OtpService:
             "sent": True,
             "resend_after": self.settings.otp_resend_seconds,
             "expires_at": expires_at,
+            "code": code,  # internal: consumed by AuthService (never serialised)
         }
-        if self.settings.otp_dev_echo:
-            payload["dev_code"] = code
         return payload
 
     def verify(self, email: str, code: str) -> None:
