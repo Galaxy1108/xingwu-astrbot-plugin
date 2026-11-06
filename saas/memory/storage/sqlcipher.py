@@ -1,0 +1,166 @@
+"""Per-Bot memory library bootstrap (SQLCipher).
+
+M1 only needs *create/delete* (bot lifecycle step 4 + rollback). The full
+memory module (repository/retrieval/tools) lands in M2 on top of this file.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+import sqlite3
+from pathlib import Path
+
+
+logger = logging.getLogger(__name__)
+
+SCHEMA_DIR = Path(__file__).resolve().parent / "schema"
+
+
+class MemoryStorageError(RuntimeError):
+    """Raised when a memory library cannot be created/opened."""
+
+
+def sqlcipher_available() -> bool:
+    try:
+        import sqlcipher3  # noqa: F401
+
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _schema_sql() -> str:
+    chunks: list[str] = []
+    for path in sorted(SCHEMA_DIR.glob("*.sql")):
+        chunks.append(path.read_text(encoding="utf-8"))
+    return "\n;\n".join(chunks)
+
+
+PRAGMAS = (
+    "PRAGMA cipher_page_size = 4096;",
+    "PRAGMA kdf_iter = 256000;",
+    "PRAGMA cipher_hmac_algorithm = HMAC_SHA512;",
+    "PRAGMA cipher_kdf_algorithm = PBKDF2_HMAC_SHA512;",
+    "PRAGMA journal_mode = WAL;",
+    "PRAGMA temp_store = MEMORY;",
+    "PRAGMA synchronous = NORMAL;",
+)
+
+
+class MemoryStorage:
+    """Creates/deletes the encrypted per-bot SQLite files.
+
+    ``key_provider(bot_id)`` returns the 32-byte SQLCipher key derived from the
+    tenant key (``HKDF(tenant_key, salt=bot_id, info="bot/memory/v1")``).
+    """
+
+    def __init__(
+        self,
+        memory_dir: str | Path,
+        *,
+        force_plaintext: bool = False,
+    ) -> None:
+        self.memory_dir = Path(memory_dir)
+        self.memory_dir.mkdir(parents=True, exist_ok=True)
+        self.encrypted = sqlcipher_available() and not force_plaintext
+        if not self.encrypted:
+            logger.error(
+                "SQLCipher 不可用：记忆库降级为普通 SQLite + 字段加密（请安装 sqlcipher3）"
+            )
+
+    # -- paths ---------------------------------------------------------
+    def path_for(self, bot_id: str) -> Path:
+        return self.memory_dir / f"{bot_id}.db"
+
+    def relative_path(self, bot_id: str) -> str:
+        return f"memory/{bot_id}.db"
+
+    def exists(self, bot_id: str) -> bool:
+        return self.path_for(bot_id).exists()
+
+    # -- connections ---------------------------------------------------
+    def _connect(self, bot_id: str, key: bytes | None = None) -> sqlite3.Connection:
+        path = self.path_for(bot_id)
+        if self.encrypted:
+            import sqlcipher3
+
+            conn = sqlcipher3.connect(str(path))
+            if key is None:
+                raise MemoryStorageError("加密记忆库必须提供 32 字节密钥")
+            if len(key) != 32:
+                raise MemoryStorageError("记忆库密钥长度必须为 32 字节")
+            conn.execute(f'PRAGMA key = "x\'{key.hex()}\'";')
+            for pragma in PRAGMAS:
+                conn.execute(pragma)
+        else:
+            conn = sqlite3.connect(str(path))
+            conn.execute("PRAGMA journal_mode = WAL")
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    # -- lifecycle -----------------------------------------------------
+    def create_library(self, bot_id: str, *, key: bytes, tenant_id: str) -> str:
+        """Create ``memory/<bot_id>.db`` with schema + meta; returns relative path."""
+        path = self.path_for(bot_id)
+        if path.exists():
+            raise MemoryStorageError(f"记忆库已存在：{path.name}")
+        now = int(__import__("time").time())
+        conn = self._connect(bot_id, key)
+        try:
+            conn.executescript(_schema_sql())
+            conn.executemany(
+                "INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)",
+                [
+                    ("bot_id", bot_id),
+                    ("tenant_id", tenant_id),
+                    ("created_at", str(now)),
+                    ("backend", "sqlcipher" if self.encrypted else "plaintext"),
+                    ("schema_version", "2"),
+                ],
+            )
+            conn.commit()
+            # Ensure the encrypted header is flushed before closing.
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except Exception as exc:  # noqa: BLE001
+            conn.close()
+            self._remove_files(path)
+            raise MemoryStorageError(f"创建记忆库失败：{exc}") from exc
+        finally:
+            try:
+                conn.close()
+            except Exception:  # noqa: BLE001
+                pass
+        if self.encrypted:
+            header = path.read_bytes()[:16]
+            if header.startswith(b"SQLite format 3\x00"):
+                self._remove_files(path)
+                raise MemoryStorageError(
+                    "记忆库未加密（SQLCipher PRAGMA key 未生效），已删除该文件"
+                )
+        return self.relative_path(bot_id)
+
+    def delete_library(self, bot_id: str) -> None:
+        self._remove_files(self.path_for(bot_id))
+
+    def _remove_files(self, path: Path) -> None:
+        for candidate in (
+            path,
+            Path(str(path) + "-wal"),
+            Path(str(path) + "-shm"),
+            Path(str(path) + "-journal"),
+        ):
+            try:
+                if candidate.exists():
+                    os.unlink(candidate)
+            except OSError:
+                logger.warning("删除记忆库文件失败：%s", candidate, exc_info=True)
+
+    # -- M2 placeholder -------------------------------------------------
+    def open_library(self, bot_id: str, *, key: bytes | None = None) -> sqlite3.Connection:
+        """Open an existing library (used by the M2 repository)."""
+        path = self.path_for(bot_id)
+        if not path.exists():
+            raise MemoryStorageError(f"记忆库不存在：{path.name}")
+        return self._connect(bot_id, key)
+

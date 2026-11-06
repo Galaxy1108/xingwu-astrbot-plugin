@@ -1,0 +1,4 @@
+aiohttp>=3.11
+cryptography>=44
+qrcode>=8.2
+sqlcipher3-binary>=0.6.0

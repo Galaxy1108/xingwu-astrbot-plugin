@@ -1,0 +1,143 @@
+:root {
+  --console-primary: #3c96ca;
+  --console-primary-dark: #2f7ba6;
+  --console-primary-soft: #eaf4fa;
+  --console-bg: #f5f7fa;
+  --console-surface: #ffffff;
+  --console-text: #1b1c1d;
+  --console-text-muted: #5f6368;
+  --console-border: #dfe3e8;
+  --console-radius: 8px;
+  --console-topbar: 56px;
+  --console-sidebar: 232px;
+  --console-gutter: 24px;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    'PingFang SC',
+    'Hiragino Sans GB',
+    'Microsoft YaHei',
+    sans-serif;
+  color: var(--console-text);
+  background: var(--console-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+}
+
+a {
+  color: var(--console-primary);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.page-container {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.stack--lg {
+  gap: 24px;
+}
+
+.text-muted {
+  color: var(--console-text-muted);
+}
+
+.text-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85em;
+}
+
+.page-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.page-grid--stats {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.page-grid--cards {
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+}
+
+.section-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+
+.hide-scrollbar {
+  scrollbar-width: thin;
+}
+
+@media (max-width: 599px) {
+  .page-container {
+    padding: 16px;
+  }
+
+  .page-grid--stats,
+  .page-grid--cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* 覆盖 Vuetify 默认字体，让控制台更紧凑 */
+.v-application {
+  font-family: inherit !important;
+  background: var(--console-bg) !important;
+}
+
+.v-card {
+  border-color: var(--console-border) !important;
+}
+
+.v-table {
+  background: transparent !important;
+}
+
+.v-btn {
+  text-transform: none;
+  letter-spacing: 0;
+}

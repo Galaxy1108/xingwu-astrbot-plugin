@@ -1,0 +1,59 @@
+{
+  "console_host": {
+    "description": "控制台 HTTP 监听地址",
+    "type": "string",
+    "default": "127.0.0.1",
+    "hint": "默认只监听本机，由 Nginx/Caddy 反向代理并启用 HTTPS。"
+  },
+  "console_port": {
+    "description": "控制台 HTTP 端口",
+    "type": "int",
+    "default": 6180,
+    "hint": "插件自带 aiohttp 控制台（JSON API + 静态页面），不是 AstrBot Dashboard 端口。"
+  },
+  "cookie_secure": {
+    "description": "会话 Cookie 是否要求 HTTPS（Secure + __Host- 前缀）",
+    "type": "bool",
+    "default": true,
+    "hint": "生产必须为 true；本地 http 调试可临时关闭（Cookie 名自动降级为 sid）。"
+  },
+  "initial_admin_email": {
+    "description": "初始管理员邮箱",
+    "type": "string",
+    "default": "",
+    "hint": "首次启动且数据库为空时，自动创建该管理员账号并写入示例模板；留空则用脚本 seed_admin.py。"
+  },
+  "allow_public_signup": {
+    "description": "允许公开注册（不需要邀请码）",
+    "type": "bool",
+    "default": false,
+    "hint": "第一期邀请制，保持 false。"
+  },
+  "allow_user_disable_encryption": {
+    "description": "测试期允许用户关闭加密（关闭=全部解密）",
+    "type": "bool",
+    "default": true,
+    "hint": "M3 实现；面向敏感客户时可关闭开关。"
+  },
+  "otp_dev_echo": {
+    "description": "开发模式：在 OTP 接口响应中回显验证码",
+    "type": "bool",
+    "default": false,
+    "hint": "仅本地调试使用，生产必须关闭。"
+  },
+  "qr_ttl_seconds": {
+    "description": "二维码有效期（秒）",
+    "type": "int",
+    "default": 60
+  },
+  "qr_max_refreshes": {
+    "description": "二维码自动刷新上限",
+    "type": "int",
+    "default": 3
+  },
+  "invite_ttl_hours": {
+    "description": "邀请码有效期（小时）",
+    "type": "int",
+    "default": 72
+  }
+}

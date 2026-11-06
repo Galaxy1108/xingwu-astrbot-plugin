@@ -1,0 +1,6 @@
+name: astrbot_plugin_saas
+display_name: 多租户 Bot 托管（SaaS 控制台）
+description: "在一台 AstrBot 上提供多租户自助托管：邀请制注册 / 邮箱 OTP、预设模板、一人多 Bot、扫码接入微信与 QQ、独立加密记忆库、隐私加密与管理后台。"
+author: int_256t
+version: 0.1.0
+repo: https://github.com/Galaxy1108/astrbot-saas-plugin
