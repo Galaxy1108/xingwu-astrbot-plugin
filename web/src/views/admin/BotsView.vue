@@ -59,6 +59,16 @@
                 <v-btn
                   size="small"
                   variant="text"
+                  color="primary"
+                  prepend-icon="mdi-eye-outline"
+                  data-testid="admin-bot-content"
+                  @click="openContent(bot)"
+                >
+                  内容
+                </v-btn>
+                <v-btn
+                  size="small"
+                  variant="text"
                   color="error"
                   :disabled="!bot.enabled || bot.status === 'deleted'"
                   @click="askDisable(bot)"
@@ -71,6 +81,8 @@
         </v-table>
       </div>
     </v-card>
+
+    <AdminContentDrawer v-model="contentOpen" :bot="contentTarget" />
 
     <ConfirmDialog
       v-model="disableOpen"
@@ -92,15 +104,18 @@ import StatusChip from '@/components/StatusChip.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import AdminContentDrawer from '@/components/AdminContentDrawer.vue'
 import { useAdminStore } from '@/stores/admin'
 import { useUiStore } from '@/stores/ui'
 import { errorMessage } from '@/utils/errors'
 import { formatDateTime, platformShortLabel } from '@/utils/format'
-import type { AdminBot } from '@/types'
+import type { AdminBot, AdminContentTarget } from '@/types'
 
 const admin = useAdminStore()
 const ui = useUiStore()
 
+const contentOpen = ref(false)
+const contentTarget = ref<AdminContentTarget | null>(null)
 const disableOpen = ref(false)
 const disableTarget = ref<AdminBot | null>(null)
 const disabling = ref(false)
@@ -120,6 +135,11 @@ async function load(): Promise<void> {
 function askDisable(bot: AdminBot): void {
   disableTarget.value = bot
   disableOpen.value = true
+}
+
+function openContent(bot: AdminBot): void {
+  contentTarget.value = { id: bot.id, name: bot.name }
+  contentOpen.value = true
 }
 
 async function confirmDisable(): Promise<void> {

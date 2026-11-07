@@ -1,6 +1,7 @@
 import { api } from './client'
 import type {
   AdminBot,
+  AdminConversationList,
   AdminLedgerAdjustPayload,
   AdminLedgerAdjustResult,
   AdminOrder,
@@ -15,6 +16,17 @@ import type {
   AuditLog,
   AuditQuery,
   Bot,
+  MemoryExportResult,
+  MemoryItem,
+  MemoryListQuery,
+  MemoryPatch,
+  MemorySettings,
+  MemorySettingsKind,
+  MemorySettingsPatch,
+  MemorySettingsTestResult,
+  ModelProfile,
+  ModelProfileInput,
+  ModelProfileList,
   PageResult,
   Template,
   TemplateInput,
@@ -115,4 +127,97 @@ export function reconcileAdminWallet(
   return api.post<{ user_id: string; balance: number }>(
     `/admin/users/${encodeURIComponent(userId)}/wallet/reconcile`,
   )
+}
+
+// ------------------------------------------------------------------ 管理端内容查看
+export function listAdminBotConversations(botId: string): Promise<AdminConversationList> {
+  return api.get<AdminConversationList>(
+    `/admin/bots/${encodeURIComponent(botId)}/conversations`,
+  )
+}
+
+export function listAdminBotMemories(
+  botId: string,
+  query: MemoryListQuery = {},
+): Promise<PageResult<MemoryItem>> {
+  return api.get<PageResult<MemoryItem>>(
+    `/admin/bots/${encodeURIComponent(botId)}/memories`,
+    {
+      page: query.page,
+      page_size: query.page_size,
+      kind: query.kind,
+      q: query.q,
+    },
+  )
+}
+
+export function patchAdminBotMemory(
+  botId: string,
+  memoryId: number,
+  payload: MemoryPatch,
+): Promise<{ memory: MemoryItem }> {
+  return api.patch<{ memory: MemoryItem }>(
+    `/admin/bots/${encodeURIComponent(botId)}/memories/${memoryId}`,
+    payload,
+  )
+}
+
+export function deleteAdminBotMemory(
+  botId: string,
+  memoryId: number,
+): Promise<{ deleted: boolean }> {
+  return api.delete<{ deleted: boolean }>(
+    `/admin/bots/${encodeURIComponent(botId)}/memories/${memoryId}`,
+  )
+}
+
+/** 管理端记忆导出：必须显式二次确认，服务端会记录审计。 */
+export function exportAdminBotMemories(botId: string): Promise<MemoryExportResult> {
+  return api.post<MemoryExportResult>(
+    `/admin/bots/${encodeURIComponent(botId)}/memories/export`,
+    { confirm: true },
+  )
+}
+
+// ------------------------------------------------------------------ 记忆 API 设置
+export function getMemorySettings(): Promise<MemorySettings> {
+  return api.get<MemorySettings>('/admin/settings/memory')
+}
+
+export function updateMemorySettings(
+  payload: MemorySettingsPatch,
+): Promise<MemorySettings> {
+  return api.put<MemorySettings>('/admin/settings/memory', payload)
+}
+
+export function testMemorySettings(
+  kind: MemorySettingsKind,
+): Promise<MemorySettingsTestResult> {
+  return api.post<MemorySettingsTestResult>('/admin/settings/memory/test', { kind })
+}
+
+// ------------------------------------------------------------------ 模型与定价
+export function listAdminModels(): Promise<ModelProfileList> {
+  return api.get<ModelProfileList>('/admin/models')
+}
+
+export function createAdminModel(
+  payload: ModelProfileInput,
+): Promise<{ model: ModelProfile }> {
+  return api.post<{ model: ModelProfile }>('/admin/models', payload)
+}
+
+export function updateAdminModel(
+  id: string,
+  payload: Partial<ModelProfileInput>,
+): Promise<{ model: ModelProfile }> {
+  return api.patch<{ model: ModelProfile }>(
+    `/admin/models/${encodeURIComponent(id)}`,
+    payload,
+  )
+}
+
+/** 删除即软禁用（enabled=false），保留历史用量/定价。 */
+export function deleteAdminModel(id: string): Promise<{ deleted: boolean }> {
+  return api.delete<{ deleted: boolean }>(`/admin/models/${encodeURIComponent(id)}`)
 }

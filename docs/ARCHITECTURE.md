@@ -141,8 +141,32 @@ saas/memory/
 - 用户侧只读：`/api/wallet`、`/api/wallet/ledger`；管理端订单列表带 `user_email`。
 - M4 才会接支付/自动充值/余额不足拦截；本期不拦截调用，只记账。
 
-## 10. 仍未实现（M3 剩余 / M4）
+## 10. 记忆增强（天使之魂对标，已实现）
 
-- 对话加密补丁（privacy guard 改造）与测试期加密开关（关闭=全部解密、回填任务、进度条）。
-- 管理员内容查看（对话/记忆）与 `content_access_logs` 用户侧透明化。
-- 支付通道、自动充值、超额拦截、发票。
+| 能力 | 实现 |
+|---|---|
+| 笔记库 | `saas/memory/notes.py`：short_id、分页读正文、notes_fts（CJK 预分词）、双后端契约测试 |
+| 记忆类型/强度 | `memory_type`（knowledge/preference/relationship/event/emotion/note）、`strength`、`access_count`、`last_decay_at`；旧 `fact` 兼容为 knowledge |
+| 巩固/衰减 | `consolidation.py`：24h 相似合并、半衰期衰减、低强度遗忘、dry-run、报告 |
+| 向量化 | `retrieval/embedding.py` + `vector_store.py`（memory_vectors，float32/余弦）；OpenAI 兼容 API |
+| 重排 | `retrieval/rerank.py`（Cohere/Jina 兼容）+ service 混合检索：FTS+向量 RRF → rerank → 规则兜底 |
+| 笔记/记忆工具 | `memory_remember`（支持 memory_type/strength）、`memory_recall`、`memory_forget`、`memory_note_create/read` |
+| 导入导出 | `export.py` 快照幂等；`migration/from_angel.py` 支持 angel 记忆/标签/笔记 |
+| 设置 | 管理端 `/admin/settings` 配置 embedding/rerank/behavior，API Key 由 KEK 信封加密 |
+
+## 11. 模型 API 与定价（M4 切片，已实现）
+
+- `model_profiles`：provider/base_url/model/api_key(密文)/points_per_1k_input/output/currency。
+- `ModelCatalogService`：CRUD、密钥封存（AAD `model:{id}:v1`）、掩码、`GET {base_url}/models` 探测。
+- `MeteringService`：`points=ceil(tokens_in/1000*in + tokens_out/1000*out)`；单事务写
+  `usage_records` + `ledger(type=consume)` + 钱包余额 + `quotas.used_tokens`；`idem_key` 幂等；
+  `billing.enforce_balance` 可开启余额不足 409。
+- 模板可绑定 `model_profile_id`（快照带到 Bot）。
+- 未做：AstrBot 实时消息 → usage 自动计量（当前由管理端/API 触发）、月度配额上限强制、支付。
+
+## 12. 仍未实现（后续）
+
+- 支付通道、自动充值、超额拦截、发票（按合规要求暂不做自动充值）。
+- 实时 token 计量（把 AstrBot 的消息用量自动写入 usage_records）。
+- 向量索引存量回填 CLI、记忆自动抽取/反思的 LLM 实现（当前规则版巩固）。
+- 主题/多语言、可访问性系统性验收。

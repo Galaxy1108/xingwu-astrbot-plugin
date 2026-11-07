@@ -49,6 +49,9 @@
               <td class="desc-cell">{{ template.description || '—' }}</td>
               <td class="nowrap conf-cell" :title="template.base_conf_id || 'default'">
                 {{ profileName(template.base_conf_id) }}
+                <div v-if="template.model_profile_id" class="model-ref text-muted">
+                  模型：{{ modelName(template.model_profile_id) }}
+                </div>
               </td>
               <td>
                 <v-chip
@@ -137,8 +140,19 @@
             persistent-hint
             class="mt-3"
           />
+          <v-select
+            v-model="form.model_profile_id"
+            :items="modelOptions"
+            item-title="title"
+            item-value="value"
+            label="模型配置（可选）"
+            hint="来自「模型与定价」；留空则沿用基础配置文件里的模型"
+            persistent-hint
+            class="mt-3"
+          />
           <p class="text-muted conf-note">
             配置文件在 AstrBot「配置管理」中维护；本模板只保存引用，下面 JSON 仅作为增量覆盖。
+            模型配置用于指定该模板创建 Bot 时使用的上游模型与定价。
           </p>
 
           <h3 class="json-title mt-5">JSON 增量覆盖</h3>
@@ -209,7 +223,15 @@ import { useAdminStore } from '@/stores/admin'
 import { useUiStore } from '@/stores/ui'
 import { errorMessage, fieldError } from '@/utils/errors'
 import { formatDateTime } from '@/utils/format'
-import type { MemoryDefaults, PrivacyDefaults, Quota, Template, TemplateInput } from '@/types'
+import { listAdminModels } from '@/api/admin'
+import type {
+  MemoryDefaults,
+  ModelProfile,
+  PrivacyDefaults,
+  Quota,
+  Template,
+  TemplateInput,
+} from '@/types'
 
 const admin = useAdminStore()
 const ui = useUiStore()
@@ -233,6 +255,7 @@ const deleting = ref(false)
 const emptyForm = () => ({
   name: '',
   base_conf_id: 'default',
+  model_profile_id: '',
   description: '',
   persona_prompt: '',
   begin_dialogs: '',
@@ -249,6 +272,7 @@ const emptyForm = () => ({
 })
 
 const form = reactive(emptyForm())
+const modelProfiles = ref<ModelProfile[]>([])
 
 const profileOptions = computed(() => {
   const items = admin.confProfiles ?? []
@@ -267,8 +291,32 @@ function profileName(id?: string): string {
   return target?.name || id || '默认配置'
 }
 
+const modelOptions = computed(() => [
+  { title: '沿用基础配置文件', value: '' },
+  ...modelProfiles.value.map((model) => ({
+    title: `${model.name}（${model.model || model.provider}${model.enabled ? '' : ' · 已禁用'}）`,
+    value: model.id,
+  })),
+])
+
+function modelName(id?: string): string {
+  if (!id) return ''
+  return modelProfiles.value.find((item) => item.id === id)?.name || id
+}
+
+async function loadModelProfiles(): Promise<void> {
+  try {
+    const result = await listAdminModels()
+    modelProfiles.value = Array.isArray(result) ? result : result.items ?? []
+  } catch {
+    // 模型接口未就绪时保留空列表，不阻塞模板编辑
+    modelProfiles.value = []
+  }
+}
+
 onMounted(() => {
   void admin.loadConfProfiles()
+  void loadModelProfiles()
   void load()
 })
 
@@ -292,6 +340,7 @@ function openEdit(template: Template): void {
   Object.assign(form, {
     name: template.name,
     base_conf_id: template.base_conf_id || 'default',
+    model_profile_id: template.model_profile_id || '',
     description: template.description ?? '',
     persona_prompt: template.persona_prompt ?? '',
     begin_dialogs: (template.begin_dialogs ?? []).join('\n'),
@@ -359,6 +408,7 @@ async function submit(): Promise<void> {
   const payload: TemplateInput = {
     name,
     base_conf_id: form.base_conf_id || 'default',
+    model_profile_id: form.model_profile_id || '',
     description: form.description.trim(),
     persona_prompt: form.persona_prompt,
     begin_dialogs: form.begin_dialogs
@@ -450,6 +500,11 @@ const hasTemplates = computed(() => admin.templates.length > 0)
   max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.model-ref {
+  margin-top: 3px;
+  font-size: 0.72rem;
 }
 
 .conf-note {

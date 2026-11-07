@@ -105,6 +105,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Bot 管理', role: 'admin' },
       },
       {
+        path: 'models',
+        name: 'admin-models',
+        component: () => import('@/views/admin/ModelsView.vue'),
+        meta: { title: '模型与定价', role: 'admin' },
+      },
+      {
+        path: 'settings',
+        name: 'admin-settings',
+        component: () => import('@/views/admin/SettingsView.vue'),
+        meta: { title: '记忆 API 设置', role: 'admin' },
+      },
+      {
         path: 'audit',
         name: 'admin-audit',
         component: () => import('@/views/admin/AuditView.vue'),

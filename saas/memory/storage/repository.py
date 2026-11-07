@@ -1,6 +1,8 @@
 """SQLite implementation of :class:`saas.memory.ports.MemoryRepository`.
 
-This is the only place in the memory module that writes SQL.
+This is the only place in the memory module that writes SQL (the note library
+in ``saas/memory/notes.py`` shares the same connection and reuses the helpers
+defined here).
 """
 
 from __future__ import annotations
@@ -8,12 +10,17 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
-from typing import Any
+import time
+from typing import Any, Iterable
 
 from ..models import (
+    DEFAULT_STRENGTH,
     Memory,
     MemoryDraft,
     RecallHit,
+    canonical_kind,
+    clamp_strength,
+    kind_variants,
     parse_metadata,
 )
 from .sqlcipher import dict_row_factory
@@ -21,6 +28,96 @@ from .sqlcipher import dict_row_factory
 
 _CJK_RUN = re.compile(r"[\u4e00-\u9fff]+")
 _WORD = re.compile(r"[A-Za-z0-9_]+")
+
+# Schema 004 (angel parity). It is applied here as well because
+# ``MemoryStorage.open_library`` historically did not run pending migrations:
+# libraries created before 004 would otherwise miss notes/strength columns.
+_SCHEMA_004_TABLES = """
+CREATE TABLE IF NOT EXISTS notes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  short_id TEXT NOT NULL UNIQUE,
+  title TEXT NOT NULL DEFAULT '',
+  content TEXT NOT NULL DEFAULT '',
+  tags TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  deleted_at INTEGER NOT NULL DEFAULT 0
+);
+CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
+  title, content, tags, tokenize='unicode61'
+);
+CREATE TABLE IF NOT EXISTS memory_vectors (
+  memory_id INTEGER PRIMARY KEY,
+  model TEXT NOT NULL DEFAULT '',
+  dim INTEGER NOT NULL DEFAULT 0,
+  vector BLOB NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+"""
+
+_SCHEMA_004_MEMORY_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("memory_type", "TEXT NOT NULL DEFAULT 'knowledge'"),
+    ("strength", "INTEGER NOT NULL DEFAULT 50"),
+    ("access_count", "INTEGER NOT NULL DEFAULT 0"),
+    ("last_decay_at", "INTEGER NOT NULL DEFAULT 0"),
+)
+
+
+def _column_names(conn: sqlite3.Connection, table: str) -> set[str]:
+    rows = conn.execute(f'PRAGMA table_info("{table}")').fetchall()
+    names: set[str] = set()
+    for row in rows:
+        if isinstance(row, dict):
+            names.add(str(row.get("name")))
+        else:  # sqlite3.Row / tuple
+            names.add(str(row[1]))
+    return names
+
+
+def _first_value(row: Any) -> Any:
+    if row is None:
+        return None
+    if isinstance(row, dict):
+        return next(iter(row.values()))
+    return row[0]
+
+
+def ensure_schema(conn: sqlite3.Connection) -> bool:
+    """Idempotently apply schema 004 to a per-bot library.
+
+    Returns ``True`` when the legacy ``memories`` table was upgraded (columns
+    added and ``memory_type`` backfilled from ``kind``). Safe to call on every
+    connection open: ``CREATE ... IF NOT EXISTS`` plus column checks make it a
+    no-op on already-upgraded libraries, and migration version 4 is recorded in
+    ``schema_migrations`` for observability.
+    """
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS schema_migrations "
+        "(version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)"
+    )
+    conn.executescript(_SCHEMA_004_TABLES)
+    columns = _column_names(conn, "memories")
+    added_memory_type = False
+    for name, ddl in _SCHEMA_004_MEMORY_COLUMNS:
+        if name in columns:
+            continue
+        conn.execute(f"ALTER TABLE memories ADD COLUMN {name} {ddl}")
+        if name == "memory_type":
+            added_memory_type = True
+    if added_memory_type:
+        # ALTER TABLE fills every legacy row with the column default
+        # ('knowledge'); restore the real type from the legacy ``kind`` value.
+        conn.execute(
+            "UPDATE memories SET memory_type = kind "
+            "WHERE kind IN ('preference','relationship','event','emotion','note') "
+            "AND (memory_type IS NULL OR memory_type = '' OR memory_type = 'knowledge')"
+        )
+    conn.execute(
+        "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (4, ?)",
+        (int(time.time()),),
+    )
+    conn.commit()
+    return added_memory_type
 
 
 def tokenize_text(text: str) -> list[str]:
@@ -66,6 +163,7 @@ class SqlCipherRepository:
     def __init__(self, conn: sqlite3.Connection) -> None:
         self.conn = conn
         self.conn.row_factory = dict_row_factory
+        ensure_schema(self.conn)
 
     # -- mapping -------------------------------------------------------
     def _tags(self, memory_id: int) -> list[str]:
@@ -77,10 +175,11 @@ class SqlCipherRepository:
 
     def _to_memory(self, row: Any) -> Memory:
         data = dict(row)
+        kind = str(data.get("kind") or "fact")
         return Memory(
             id=int(data["id"]),
             content=str(data.get("content") or ""),
-            kind=str(data.get("kind") or "fact"),
+            kind=kind,
             reasoning=str(data.get("reasoning") or ""),
             importance=int(data.get("importance") or 3),
             pinned=bool(data.get("pinned")),
@@ -94,20 +193,33 @@ class SqlCipherRepository:
             last_recalled_at=int(data.get("last_recalled_at") or 0),
             recall_count=int(data.get("recall_count") or 0),
             deleted_at=int(data.get("deleted_at") or 0),
+            memory_type=str(
+                data.get("memory_type") or canonical_kind(kind)
+            ),
+            strength=clamp_strength(
+                data.get("strength", DEFAULT_STRENGTH), DEFAULT_STRENGTH
+            ),
+            access_count=int(data.get("access_count") or 0),
+            last_decay_at=int(data.get("last_decay_at") or 0),
         )
 
     # -- writes --------------------------------------------------------
     def add(self, draft: MemoryDraft, *, now: int) -> int:
         cursor = self.conn.execute(
-            "INSERT INTO memories(kind, content, reasoning, importance, pinned, "
-            "source_conversation_id, source_message_id, metadata, created_at, updated_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO memories(kind, memory_type, content, reasoning, importance, "
+            "strength, pinned, access_count, last_decay_at, source_conversation_id, "
+            "source_message_id, metadata, created_at, updated_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 draft.kind,
+                draft.effective_memory_type(),
                 draft.content,
                 draft.reasoning,
                 max(1, min(5, int(draft.importance))),
+                clamp_strength(draft.strength),
                 1 if draft.pinned else 0,
+                0,
+                0,
                 draft.source_conversation_id,
                 draft.source_message_id,
                 json.dumps(draft.metadata or {}, ensure_ascii=False),
@@ -133,13 +245,16 @@ class SqlCipherRepository:
 
     def update(self, memory: Memory, *, now: int) -> None:
         self.conn.execute(
-            "UPDATE memories SET kind = ?, content = ?, reasoning = ?, importance = ?, "
-            "pinned = ?, metadata = ?, updated_at = ? WHERE id = ? AND deleted_at = 0",
+            "UPDATE memories SET kind = ?, memory_type = ?, content = ?, reasoning = ?, "
+            "importance = ?, strength = ?, pinned = ?, metadata = ?, updated_at = ? "
+            "WHERE id = ? AND deleted_at = 0",
             (
                 memory.kind,
+                memory.effective_memory_type(),
                 memory.content,
                 memory.reasoning,
                 max(1, min(5, int(memory.importance))),
+                clamp_strength(memory.strength),
                 1 if memory.pinned else 0,
                 json.dumps(memory.metadata or {}, ensure_ascii=False),
                 now,
@@ -169,11 +284,29 @@ class SqlCipherRepository:
             return
         placeholders = ",".join("?" for _ in memory_ids)
         self.conn.execute(
-            f"UPDATE memories SET last_recalled_at = ?, recall_count = recall_count + 1 "
-            f"WHERE id IN ({placeholders})",
+            f"UPDATE memories SET last_recalled_at = ?, recall_count = recall_count + 1, "
+            f"access_count = access_count + 1 WHERE id IN ({placeholders})",
             [now, *memory_ids],
         )
         self.conn.commit()
+
+    def apply_decay(
+        self, decays: Iterable[tuple[int, int]], *, now: int
+    ) -> int:
+        """Persist strength decay for ``(memory_id, strength)`` pairs."""
+        rows = [
+            (clamp_strength(strength), int(now), int(now), int(memory_id))
+            for memory_id, strength in decays
+        ]
+        if not rows:
+            return 0
+        self.conn.executemany(
+            "UPDATE memories SET strength = ?, last_decay_at = ?, updated_at = ? "
+            "WHERE id = ? AND deleted_at = 0",
+            rows,
+        )
+        self.conn.commit()
+        return len(rows)
 
     def _index(self, memory_id: int) -> None:
         memory = self.get(memory_id)
@@ -191,6 +324,15 @@ class SqlCipherRepository:
         )
 
     # -- reads ---------------------------------------------------------
+    @staticmethod
+    def _kind_clause(kind: str | None, params: list[Any], *, prefix: str = "m.") -> str:
+        variants = kind_variants(kind)
+        if not variants:
+            return ""
+        placeholders = ",".join("?" for _ in variants)
+        params.extend(variants)
+        return f"{prefix}kind IN ({placeholders})"
+
     def list(
         self,
         *,
@@ -198,15 +340,23 @@ class SqlCipherRepository:
         tag: str | None = None,
         cursor: int | None = None,
         limit: int = 50,
+        since: int | None = None,
+        until: int | None = None,
     ) -> list[Memory]:
         where = ["m.deleted_at = 0"]
         params: list[Any] = []
-        if kind:
-            where.append("m.kind = ?")
-            params.append(kind)
+        kind_clause = self._kind_clause(kind, params)
+        if kind_clause:
+            where.append(kind_clause)
         if cursor is not None:
             where.append("m.id < ?")
             params.append(int(cursor))
+        if since is not None:
+            where.append("m.created_at >= ?")
+            params.append(int(since))
+        if until is not None:
+            where.append("m.created_at <= ?")
+            params.append(int(until))
         clause = " AND ".join(where)
         params.append(limit)
         if tag:
@@ -238,9 +388,9 @@ class SqlCipherRepository:
             return []
         where = ["memories_fts MATCH ?", "m.deleted_at = 0"]
         params: list[Any] = [match]
-        if kind:
-            where.append("m.kind = ?")
-            params.append(kind)
+        kind_clause = self._kind_clause(kind, params)
+        if kind_clause:
+            where.append(kind_clause)
         if since:
             where.append("m.created_at >= ?")
             params.append(int(since))
@@ -273,12 +423,17 @@ class SqlCipherRepository:
                 return memory
         return None
 
-    def count(self, *, kind: str | None = None, tag: str | None = None) -> int:
+    def count(
+        self,
+        *,
+        kind: str | None = None,
+        tag: str | None = None,
+    ) -> int:
         where = ["m.deleted_at = 0"]
         params: list[Any] = []
-        if kind:
-            where.append("m.kind = ?")
-            params.append(kind)
+        kind_clause = self._kind_clause(kind, params)
+        if kind_clause:
+            where.append(kind_clause)
         if tag:
             where.append(
                 "EXISTS(SELECT 1 FROM memory_tags t WHERE t.memory_id = m.id AND t.tag = ?)"

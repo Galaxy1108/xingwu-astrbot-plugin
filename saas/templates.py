@@ -45,6 +45,8 @@ def serialize_template(row: dict[str, Any]) -> dict[str, Any]:
     for field_name in JSON_FIELDS:
         item[field_name] = _parse_json(item.get(field_name), _default_for(field_name))
     item["enabled"] = bool(item.get("enabled"))
+    # M4: the template may pin a model profile (pricing + credentials live there).
+    item["model_profile_id"] = str(item.get("model_profile_id") or "")
     return item
 
 
@@ -82,6 +84,11 @@ class TemplateService:
             cleaned["base_conf_id"] = base_conf_id
         if "persona_prompt" in payload:
             cleaned["persona_prompt"] = str(payload.get("persona_prompt") or "")
+        if "model_profile_id" in payload or not partial:
+            model_profile_id = str(payload.get("model_profile_id") or "").strip()
+            if len(model_profile_id) > 64:
+                raise ValidationError("model_profile_id 不合法", field="model_profile_id")
+            cleaned["model_profile_id"] = model_profile_id
         for field_name in ("begin_dialogs", "user_overridable"):
             if field_name in payload:
                 value = payload[field_name]
@@ -137,8 +144,8 @@ class TemplateService:
         self.db.execute(
             "INSERT INTO templates(id, name, description, persona_prompt, begin_dialogs, "
             "config_patch, memory_defaults, privacy_defaults, quota, user_overridable, "
-            "enabled, created_by, created_at, updated_at, base_conf_id) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "enabled, created_by, created_at, updated_at, base_conf_id, model_profile_id) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 template_id,
                 cleaned["name"],
@@ -155,6 +162,7 @@ class TemplateService:
                 now,
                 now,
                 cleaned.get("base_conf_id", "default"),
+                cleaned.get("model_profile_id", ""),
             ),
         )
         return self.get(template_id)
@@ -202,5 +210,6 @@ class TemplateService:
             "privacy_defaults": template["privacy_defaults"],
             "quota": template["quota"],
             "user_overridable": template["user_overridable"],
+            "model_profile_id": template.get("model_profile_id", ""),
             "captured_at": self.clock.now(),
         }

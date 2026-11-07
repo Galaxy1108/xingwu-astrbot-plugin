@@ -62,6 +62,8 @@
 | `qr_expired` | 410 | 扫码会话已过期/刷新超限 |
 | `qr_not_ready` | 409 | 尚未扫码成功，不能 finalize |
 | `conflict` | 409 | 其他并发冲突 |
+| `insufficient_balance` | 409 | 预付费点数不足（`extra` 含 balance/points；M4 可开关） |
+| `upstream_error` | 502 | 上游模型/向量 API 探测失败（已脱敏） |
 | `internal_error` | 500 | 服务端错误（不泄露堆栈） |
 
 ## 1. 认证
@@ -137,6 +139,7 @@
 {
   "id": "t_...", "name": "默认陪伴", "description": "…",
   "base_conf_id": "default",
+  "model_profile_id": "",
   "persona_prompt": "…", "begin_dialogs": ["…"],
   "config_patch": { "provider_settings": {} },
   "memory_defaults": { "auto": false, "max_items": 2000, "retention_days": 90, "recall_top_k": 5 },
@@ -267,12 +270,33 @@ Memory 对象：
 - `POST /api/bots/{id}/memories/export` → `{bot_id, exported_at, count, items}`（前端下载 JSON）
 - `POST /api/bots/{id}/memories/import` → M2 暂 501（导入走 CLI：`saas/memory/migration/from_angel.py`）
 
+## 3.2 记忆笔记（天使之魂对标）
+
+- `GET/POST /api/bots/{id}/notes?page=&page_size=&tag=&q=` → 笔记列表/新建（`{title,content,tags[]}`）
+- `GET/PATCH/DELETE /api/bots/{id}/notes/{short_id}` → 详情/编辑/软删
+- `GET /api/bots/{id}/notes/{short_id}/read?offset=&limit=` → `{short_id,title,content,offset,total_length,has_more,next_offset}`（按字符分页，CJK 安全）
+- `POST /api/bots/{id}/memories/consolidate` `{dry_run?}` → 规则版「睡眠巩固」报告
+  `{bot_id,dry_run,scanned,merged_groups,merged_records,decayed,forgotten,kept}`（写审计）
+- 记忆字段新增：`memory_type`(knowledge/preference/relationship/event/emotion/note)、`strength`(0–100)、
+  `access_count`、`last_decay_at`；旧 `kind=fact` 视为 `knowledge`。
+
+## 3.3 记忆 API 设置（管理员）
+
+- `GET/PUT /api/admin/settings/memory`：`embedding/rerank/behavior` 三段；GET 中 `api_key` 掩码、
+  `has_api_key` 标识；PUT 为深合并，`"••••••••"` 表示保持，`""` 表示清除。
+- `POST /api/admin/settings/memory/test` `{kind:"embedding"|"rerank"}` → 实际调用上游，
+  `{ok,dim|count,message,latency_ms,model}`；失败 502 `upstream_error`（脱敏）。
+- 未配置时检索回退 FTS + 规则重排；配置 embedding 后启用向量候选 + RRF，配置 rerank 后对候选重排
+  （失败回退规则，不影响可用性）。
+
 ## 4. 额度 / 访问记录（本期只读，M1 返回空数据）
 
 - `GET /api/wallet` → `{ "balance": 0, "currency": "points", "ledger_total": 0 }`
 - `GET /api/wallet/usage?days=14` → `{ days, start, end, balance, total_in, total_out, points: [{date, delta, in, out, balance}], scope: "platform_points_ledger" }`（余额走势图）
 - `GET /api/wallet/ledger?page=1` → `{ "items": [{id,delta,type,ref,note,created_at}], "total": 0, "page": 1, "page_size": 20 }`
 - `GET /api/access-log?page=1` → `{ "items": [], "total": 0, "page": 1, "page_size": 20 }`
+- `GET /api/models` → `{items:[{id,name,provider,model,points_per_1k_input,points_per_1k_output,currency,note,...}]}`（仅 enabled，不含 key/base_url）
+- `GET /api/me/usage?page=&page_size=` → `{items,total,page,page_size,summary}`（summary 为近 30 天 tokens/points）
 - `GET /api/me/encryption` → `{ enabled, state, changed_at, done, total, percent, eta, job? }`
   - `state ∈ encrypted | decrypting | plaintext | encrypting | paused`
   - `job = {id,direction,status,total,done,percent,error,created_at,finished_at}`
@@ -289,6 +313,18 @@ Memory 对象：
 - `POST /api/admin/bots/{id}/memories/export` `{ "confirm": true }` → 导出 JSON（二次确认 + 审计）
 - 用户侧 `GET /api/access-log` 可看到这些访问记录。
 - `GET/PUT /api/admin/users/{id}/encryption`：GET 同用户状态；PUT 只允许 `{enabled:true}`（强制开启），关闭返回 403。
+
+## 5.0 模型与定价 / 用量（管理员）
+
+- `GET /api/admin/models?page=&page_size=&enabled=` → 分页模型目录（api_key 掩码 + has_api_key）
+- `POST /api/admin/models` → 201（name/model 必填；价格 ≥0 点/1K tokens；base_url http(s)）
+- `PATCH /api/admin/models/{id}` → 部分更新；`api_key:""` 或 `clear_api_key:true` 清空
+- `DELETE /api/admin/models/{id}` → 软禁用（enabled=0，保留历史用量/定价）
+- `POST /api/admin/models/{id}/test` → `{ok,status,latency_ms,model,base_url}`；失败 502 脱敏
+- `POST /api/admin/usage` `{user_id,bot_id?,model_id,tokens_in,tokens_out,ref?,idem_key?}` → `{usage,points,idempotent,balance}`
+  - `points = ceil(tokens_in/1000*in_price + tokens_out/1000*out_price)`；写 `usage_records` + `ledger(type=consume)`
+    + 钱包余额 + `quotas.used_tokens`；幂等键重复不重复扣费；`billing.enforce_balance=true` 时余额不足 409。
+- `GET /api/admin/usage?user_id=&page=&page_size=` → 分页用量 + `summary`（30 天）
 
 ## 5. 管理端（`role=admin`；否则 403）
 
@@ -322,7 +358,7 @@ Memory 对象：
 - `GET /api/admin/overview` → 平台账本统计：
   `{ users, bots, ready_bots, balance_total, granted_points, adjusted_in_points, deducted_points, tokens_used, tokens_metered, paid_orders, paid_orders_amount_cny, balance_scope: "platform_points_ledger" }`
   - `balance_total` 是**平台内预付费点数合计**，不是上游模型账户余额（上游余额不查询、不展示）。
-  - `tokens_metered=false` 表示尚未接入 token 用量计量（M4）。
+  - `tokens_metered` 表示是否已有记录到 `quotas.used_tokens` 的用量（M4 计量后可变为 true）。
 - `GET /api/admin/audit?page=&action=&actor_id=&target_id=` → `{ "items": [AuditLog], "total": 0, "page", "page_size" }`
 
 AuditLog：`{ "id": 1, "actor_id", "actor_role", "action", "target_type", "target_id", "reason", "detail", "ip", "created_at" }`

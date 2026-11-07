@@ -8,3 +8,10 @@ export function listAccessLog(page = 1, pageSize = 20): Promise<PageResult<Acces
 export function getEncryptionStatus(): Promise<EncryptionStatus> {
   return api.get<EncryptionStatus>('/me/encryption')
 }
+
+export function setEncryption(
+  enabled: boolean,
+  confirm?: string,
+): Promise<EncryptionStatus> {
+  return api.put<EncryptionStatus>('/me/encryption', { enabled, confirm })
+}

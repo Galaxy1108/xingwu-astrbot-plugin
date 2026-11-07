@@ -35,5 +35,11 @@ export default defineConfig({
     globals: true,
     include: ['src/**/*.spec.ts'],
     restoreMocks: true,
+    server: {
+      deps: {
+        // Vuetify 的组件入口按需 import 了 .css；内联后由 Vite 处理，jsdom 才能加载。
+        inline: ['vuetify'],
+      },
+    },
   },
 })

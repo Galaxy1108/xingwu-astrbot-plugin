@@ -17,6 +17,8 @@ from .crypto import KeyManager
 from .db import Database
 from .fake_astrbot import FakeAstrBot
 from .mailer import build_mailer
+from .metering import MeteringService
+from .model_catalog import ModelCatalogService
 from .memory.api import MemoryAPI
 from .memory.extraction.command import CommandExtractor
 from .memory.service import LoggingEventBus, MemoryService
@@ -86,6 +88,16 @@ class Container:
         )
         self.settings_store = SettingsStore(self.db, self.key_manager, self.clock)
         self.templates = TemplateService(self.db, self.clock)
+        self.models = ModelCatalogService(
+            self.db, key_manager=self.key_manager, audit=self.audit, clock=self.clock
+        )
+        self.metering = MeteringService(
+            self.db,
+            audit=self.audit,
+            clock=self.clock,
+            settings_store=self.settings_store,
+            catalog=self.models,
+        )
         self.billing = BillingService(self.db, audit=self.audit, clock=self.clock)
         self.memory_storage = MemoryStorage(
             settings.memory_dir, force_plaintext=memory_plaintext
@@ -96,6 +108,7 @@ class Container:
         self.memory_service = MemoryService(
             self.memory_store,
             clock=self.clock,
+            settings_store=self.settings_store,
             extractor=CommandExtractor(),
             events=LoggingEventBus(),
         )

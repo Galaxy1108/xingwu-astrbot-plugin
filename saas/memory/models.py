@@ -10,21 +10,88 @@ from typing import Any
 
 
 class MemoryKind(str, Enum):
-    FACT = "fact"
+    """Canonical memory types (angel-memory parity).
+
+    ``fact`` is the legacy spelling of ``knowledge`` (very old libraries store
+    it). It remains an accepted input/filter value via :func:`canonical_kind`
+    and :func:`kind_variants`, but new writes should use ``knowledge``.
+    """
+
+    KNOWLEDGE = "knowledge"
     PREFERENCE = "preference"
+    RELATIONSHIP = "relationship"
     EVENT = "event"
+    EMOTION = "emotion"
     NOTE = "note"
+    # Legacy alias: ``fact`` is the old spelling of ``knowledge``. Kept as an
+    # enum alias so ``MemoryKind.FACT.value == "knowledge"``.
+    FACT = "knowledge"
 
 
+# Explicit string keys: ``MemoryKind.FACT`` is an alias of KNOWLEDGE, but the
+# legacy ``fact`` label must stay available for old rows.
 KIND_LABELS: dict[str, str] = {
-    MemoryKind.FACT.value: "事实",
-    MemoryKind.PREFERENCE.value: "偏好",
-    MemoryKind.EVENT.value: "事件",
-    MemoryKind.NOTE.value: "笔记",
+    "knowledge": "知识",
+    "preference": "偏好",
+    "relationship": "关系",
+    "event": "事件",
+    "emotion": "情感",
+    "note": "笔记",
+    "fact": "事实",
+}
+
+# Kinds that may be written by the LLM tool / command parser (``fact`` is the
+# legacy spelling of knowledge and stays accepted through ``KIND_LABELS``).
+TOOL_KINDS: tuple[str, ...] = (
+    "knowledge",
+    "preference",
+    "relationship",
+    "event",
+    "emotion",
+    "note",
+)
+
+# ``fact`` is the legacy spelling of ``knowledge``. Filters expand the pair so
+# old libraries (kind='fact') and new libraries (kind='knowledge') behave
+# identically without rewriting historical rows.
+KIND_ALIASES: dict[str, tuple[str, ...]] = {
+    "fact": ("knowledge", "fact"),
+    "knowledge": ("knowledge", "fact"),
 }
 
 DEFAULT_IMPORTANCE = 3
+DEFAULT_STRENGTH = 50
+MIN_STRENGTH = 0
+MAX_STRENGTH = 100
 MAX_CONTENT_LENGTH = 4000
+
+
+def canonical_kind(kind: Any) -> str:
+    """Return the canonical memory type (``fact`` → ``knowledge``)."""
+    text = str(kind or "").strip().lower()
+    if not text:
+        return MemoryKind.KNOWLEDGE.value
+    if text == "fact":
+        return MemoryKind.KNOWLEDGE.value
+    if text in KIND_LABELS:
+        return text
+    return MemoryKind.KNOWLEDGE.value
+
+
+def kind_variants(kind: Any) -> tuple[str, ...]:
+    """SQL/in-memory filter values matching ``kind`` (legacy alias aware)."""
+    text = str(kind or "").strip().lower()
+    if not text:
+        return ()
+    return KIND_ALIASES.get(text, (text,))
+
+
+def clamp_strength(value: Any, default: int = DEFAULT_STRENGTH) -> int:
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        number = default
+    return max(MIN_STRENGTH, min(MAX_STRENGTH, number))
 
 
 def normalize_content(text: str) -> str:
@@ -35,7 +102,7 @@ def normalize_content(text: str) -> str:
 @dataclass
 class MemoryDraft:
     content: str
-    kind: str = MemoryKind.FACT.value
+    kind: str = MemoryKind.KNOWLEDGE.value
     reasoning: str = ""
     importance: int = DEFAULT_IMPORTANCE
     pinned: bool = False
@@ -43,16 +110,23 @@ class MemoryDraft:
     metadata: dict[str, Any] = field(default_factory=dict)
     source_conversation_id: str = ""
     source_message_id: str = ""
+    # Angel-memory parity fields. ``memory_type`` defaults to the canonical
+    # form of ``kind`` when omitted.
+    memory_type: str = ""
+    strength: int = DEFAULT_STRENGTH
 
     def normalized(self) -> str:
         return normalize_content(self.content)
+
+    def effective_memory_type(self) -> str:
+        return canonical_kind(self.memory_type or self.kind)
 
 
 @dataclass
 class Memory:
     id: int
     content: str
-    kind: str = MemoryKind.FACT.value
+    kind: str = MemoryKind.KNOWLEDGE.value
     reasoning: str = ""
     importance: int = DEFAULT_IMPORTANCE
     pinned: bool = False
@@ -66,18 +140,31 @@ class Memory:
     last_recalled_at: int = 0
     recall_count: int = 0
     deleted_at: int = 0
+    memory_type: str = ""
+    strength: int = DEFAULT_STRENGTH
+    access_count: int = 0
+    last_decay_at: int = 0
 
     def normalized(self) -> str:
         return normalize_content(self.content)
 
+    def effective_memory_type(self) -> str:
+        return canonical_kind(self.memory_type or self.kind)
+
     def to_dict(self) -> dict[str, Any]:
+        memory_type = self.effective_memory_type()
         return {
             "id": self.id,
             "kind": self.kind,
             "kind_label": KIND_LABELS.get(self.kind, self.kind),
+            "memory_type": memory_type,
+            "memory_type_label": KIND_LABELS.get(memory_type, memory_type),
             "content": self.content,
             "reasoning": self.reasoning,
             "importance": self.importance,
+            "strength": self.strength,
+            "access_count": self.access_count,
+            "last_decay_at": self.last_decay_at,
             "pinned": bool(self.pinned),
             "tags": list(self.tags),
             "metadata": dict(self.metadata),

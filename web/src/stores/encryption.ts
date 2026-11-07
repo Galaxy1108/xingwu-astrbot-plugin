@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { getEncryptionStatus } from '@/api/privacy'
+import { getEncryptionStatus, setEncryption } from '@/api/privacy'
 import { toApiError, type ApiError } from '@/api/client'
 import type { EncryptionStatus } from '@/types'
 
@@ -36,5 +36,22 @@ export const useEncryptionStore = defineStore('encryption', () => {
     }
   }
 
-  return { status, loading, error, enabled, state, isPlaintext, inProgress, percent, fetchStatus }
+  async function toggle(enabled: boolean, confirm?: string): Promise<EncryptionStatus> {
+    const result = await setEncryption(enabled, confirm)
+    status.value = result
+    return result
+  }
+
+  return {
+    status,
+    loading,
+    error,
+    enabled,
+    state,
+    isPlaintext,
+    inProgress,
+    percent,
+    fetchStatus,
+    toggle,
+  }
 })

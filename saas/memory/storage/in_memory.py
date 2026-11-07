@@ -7,9 +7,17 @@ service layer, so the orchestration code never needs a real SQLCipher file.
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Iterable
 
-from ..models import Memory, MemoryDraft, RecallHit, normalize_content
+from ..models import (
+    DEFAULT_STRENGTH,
+    Memory,
+    MemoryDraft,
+    RecallHit,
+    clamp_strength,
+    kind_variants,
+    normalize_content,
+)
 
 
 class InMemoryRepository:
@@ -35,6 +43,10 @@ class InMemoryRepository:
             last_recalled_at=memory.last_recalled_at,
             recall_count=memory.recall_count,
             deleted_at=memory.deleted_at,
+            memory_type=memory.effective_memory_type(),
+            strength=memory.strength,
+            access_count=memory.access_count,
+            last_decay_at=memory.last_decay_at,
         )
 
     def add(self, draft: MemoryDraft, *, now: int) -> int:
@@ -53,6 +65,8 @@ class InMemoryRepository:
             source_message_id=draft.source_message_id,
             created_at=now,
             updated_at=now,
+            memory_type=draft.effective_memory_type(),
+            strength=clamp_strength(draft.strength, DEFAULT_STRENGTH),
         )
         return memory_id
 
@@ -83,6 +97,10 @@ class InMemoryRepository:
             last_recalled_at=current.last_recalled_at,
             recall_count=current.recall_count,
             deleted_at=0,
+            memory_type=memory.effective_memory_type(),
+            strength=clamp_strength(memory.strength, DEFAULT_STRENGTH),
+            access_count=current.access_count,
+            last_decay_at=current.last_decay_at,
         )
 
     def soft_delete(self, memory_id: int, *, now: int) -> None:
@@ -97,6 +115,21 @@ class InMemoryRepository:
             if memory is not None and not memory.deleted_at:
                 memory.last_recalled_at = now
                 memory.recall_count += 1
+                memory.access_count += 1
+
+    def apply_decay(
+        self, decays: Iterable[tuple[int, int]], *, now: int
+    ) -> int:
+        count = 0
+        for memory_id, strength in decays:
+            memory = self._items.get(int(memory_id))
+            if memory is None or memory.deleted_at:
+                continue
+            memory.strength = clamp_strength(strength, DEFAULT_STRENGTH)
+            memory.last_decay_at = int(now)
+            memory.updated_at = int(now)
+            count += 1
+        return count
 
     def list(
         self,
@@ -105,14 +138,19 @@ class InMemoryRepository:
         tag: str | None = None,
         cursor: int | None = None,
         limit: int = 50,
+        since: int | None = None,
+        until: int | None = None,
     ) -> list[Memory]:
+        variants = kind_variants(kind)
         items = [
             self._copy(memory)
             for memory in self._items.values()
             if not memory.deleted_at
-            and (kind is None or memory.kind == kind)
+            and (not variants or memory.kind in variants)
             and (tag is None or tag in memory.tags)
             and (cursor is None or memory.id < cursor)
+            and (since is None or memory.created_at >= since)
+            and (until is None or memory.created_at <= until)
         ]
         items.sort(key=lambda item: (item.pinned, item.id), reverse=True)
         return items[:limit]
@@ -128,9 +166,12 @@ class InMemoryRepository:
         terms = [term for term in re.split(r"\s+", (query or "").strip()) if term]
         if not terms:
             return []
+        variants = kind_variants(kind)
         hits: list[RecallHit] = []
         for memory in self._items.values():
-            if memory.deleted_at or (kind and memory.kind != kind):
+            if memory.deleted_at:
+                continue
+            if variants and memory.kind not in variants:
                 continue
             if since and memory.created_at < since:
                 continue
@@ -150,11 +191,12 @@ class InMemoryRepository:
         return hits[:limit]
 
     def count(self, *, kind: str | None = None, tag: str | None = None) -> int:
+        variants = kind_variants(kind)
         return sum(
             1
             for memory in self._items.values()
             if not memory.deleted_at
-            and (kind is None or memory.kind == kind)
+            and (not variants or memory.kind in variants)
             and (tag is None or tag in memory.tags)
         )
 

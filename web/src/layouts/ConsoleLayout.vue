@@ -3,48 +3,83 @@
     v-model="drawerOpen"
     :permanent="!isMobile"
     :temporary="isMobile"
+    :rail="isRail"
+    rail-width="56"
     :width="245"
     class="console-drawer"
     elevation="0"
   >
-    <div class="brand-row">
-      <v-icon color="primary" size="26">mdi-robot-outline</v-icon>
-      <span class="brand-name">AstrBot</span>
-      <v-chip size="x-small" variant="tonal" color="primary" class="ml-auto">SaaS</v-chip>
-    </div>
-    <v-divider />
-    <v-list nav density="compact" class="nav-list">
-      <v-list-item
-        v-for="item in navItems"
-        :key="item.to"
-        :to="item.to"
-        :prepend-icon="item.icon"
-        :title="item.title"
-        :exact="item.to === '/'"
-        rounded="lg"
-      />
-      <template v-if="auth.isAdmin">
-        <v-divider class="my-2" />
-        <v-list-subheader class="admin-subheader">管理员</v-list-subheader>
+    <div class="sidebar-container">
+      <div class="brand-row" :class="{ 'brand-row--rail': isRail }">
+        <v-icon color="primary" size="22">mdi-robot-outline</v-icon>
+        <template v-if="!isRail">
+          <span class="brand-name">AstrBot</span>
+          <v-chip size="x-small" variant="tonal" color="primary" class="brand-chip">SaaS</v-chip>
+        </template>
+        <v-spacer v-if="!isRail" />
+        <v-btn
+          v-if="!isMobile"
+          icon
+          size="small"
+          variant="text"
+          class="rail-toggle"
+          :aria-label="isRail ? '展开侧栏' : '收起侧栏'"
+          @click="rail = !rail"
+        >
+          <v-icon size="18">mdi-menu-open</v-icon>
+        </v-btn>
+      </div>
+
+      <v-list nav density="compact" class="nav-list">
         <v-list-item
-          to="/admin"
-          prepend-icon="mdi-shield-account-outline"
-          title="管理后台"
+          v-for="item in navItems"
+          :key="item.to"
+          :to="item.to"
+          :prepend-icon="item.icon"
+          :title="isRail ? undefined : item.title"
+          :exact="item.to === '/'"
           rounded="lg"
+          color="primary"
+          class="nav-item"
+          :aria-label="item.title"
         />
-      </template>
-    </v-list>
-    <template #append>
-      <div class="drawer-footer">
-        <div class="user-line">
+        <template v-if="auth.isAdmin">
+          <div v-if="!isRail" class="nav-group-title">管理员</div>
+          <v-divider v-else class="my-2" />
+          <v-list-item
+            to="/admin"
+            prepend-icon="mdi-shield-account-outline"
+            :title="isRail ? undefined : '管理后台'"
+            rounded="lg"
+            color="primary"
+            class="nav-item"
+            aria-label="管理后台"
+          />
+        </template>
+      </v-list>
+
+      <v-spacer />
+
+      <div class="sidebar-footer">
+        <div v-if="!isRail" class="user-line">
           <v-icon size="16">mdi-account-circle-outline</v-icon>
           <span class="user-email" :title="auth.user?.email">{{ auth.user?.email || '未登录' }}</span>
         </div>
-        <v-btn block variant="text" size="small" prepend-icon="mdi-logout" @click="onLogout">
-          退出登录
+        <v-btn
+          block
+          variant="text"
+          size="small"
+          :prepend-icon="isRail ? undefined : 'mdi-logout'"
+          class="footer-btn"
+          aria-label="退出登录"
+          @click="onLogout"
+        >
+          <span v-if="!isRail">退出登录</span>
+          <v-icon v-else size="18">mdi-logout</v-icon>
         </v-btn>
+        <div v-if="!isRail" class="version-line">AstrBot SaaS {{ auth.version || '0.3.0' }}</div>
       </div>
-    </template>
+    </div>
   </v-navigation-drawer>
 
   <v-app-bar flat height="56" class="console-topbar">
@@ -81,6 +116,8 @@ const { smAndDown } = useDisplay()
 
 const isMobile = computed(() => smAndDown.value)
 const drawerOpen = ref(!isMobile.value)
+const rail = ref(false)
+const isRail = computed(() => rail.value && !isMobile.value)
 
 watch(isMobile, (mobile) => {
   drawerOpen.value = !mobile
@@ -113,7 +150,14 @@ function refreshPage(): void {
 
 <style scoped>
 .console-drawer {
-  border-right: 1px solid var(--console-border);
+  border-right: 1px solid rgba(0, 0, 0, 0.06);
+  background: #fff;
+}
+
+.sidebar-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
 .brand-row {
@@ -121,29 +165,72 @@ function refreshPage(): void {
   align-items: center;
   gap: 8px;
   height: 56px;
-  padding: 0 16px;
+  padding: 0 12px 0 22px;
+}
+
+.brand-row--rail {
+  justify-content: center;
+  padding: 0;
 }
 
 .brand-name {
-  font-size: 1.05rem;
+  font-size: 16px;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.2px;
+  color: var(--console-text);
+}
+
+.brand-chip {
+  height: 18px;
+  font-size: 10px;
+}
+
+.rail-toggle {
+  margin-left: auto;
+  color: rgba(0, 0, 0, 0.45);
 }
 
 .nav-list {
-  padding: 8px;
+  padding: 6px 8px;
 }
 
-.admin-subheader {
-  font-size: 0.72rem;
-  text-transform: none;
-  letter-spacing: 0.04em;
-  min-height: 28px;
+.nav-group-title {
+  padding: 14px 12px 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(0, 0, 0, 0.45);
 }
 
-.drawer-footer {
-  padding: 12px;
-  border-top: 1px solid var(--console-border);
+:deep(.nav-item) {
+  min-height: 40px;
+  margin: 1px 0;
+  border-radius: 8px;
+}
+
+:deep(.nav-item .v-list-item__prepend > .v-icon) {
+  font-size: 18px;
+  opacity: 0.82;
+}
+
+:deep(.nav-item .v-list-item-title) {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+:deep(.nav-item.v-list-item--active) {
+  background: rgba(60, 150, 202, 0.11);
+}
+
+:deep(.nav-item.v-list-item--active .v-list-item__prepend > .v-icon) {
+  opacity: 1;
+}
+
+.sidebar-footer {
+  border-top: 1px solid rgba(0, 0, 0, 0.07);
+  padding: 10px 12px 12px;
 }
 
 .user-line {
@@ -151,9 +238,10 @@ function refreshPage(): void {
   align-items: center;
   gap: 6px;
   color: var(--console-text-muted);
-  font-size: 0.8rem;
-  margin-bottom: 4px;
+  font-size: 12.5px;
+  margin-bottom: 2px;
   padding: 0 4px;
+  min-width: 0;
 }
 
 .user-email {
@@ -162,18 +250,24 @@ function refreshPage(): void {
   white-space: nowrap;
 }
 
+.version-line {
+  padding: 4px 4px 0;
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.38);
+}
+
 .console-topbar {
-  border-bottom: 1px solid var(--console-border);
-  background: var(--console-surface);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.07);
+  background: #fff;
 }
 
 .topbar-title {
-  font-size: 1rem;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 500;
   letter-spacing: 0;
 }
 
-/* AstrBot 风格：桌面端页面自带标题，顶栏不再重复显示 */
+/* 页面自带标题，桌面端顶栏只留操作区 */
 @media (min-width: 960px) {
   .topbar-title {
     visibility: hidden;

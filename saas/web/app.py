@@ -236,6 +236,22 @@ def create_app(container: Container) -> web.Application:
     app.add_routes(routes_auth.routes)
     app.add_routes(routes_bots.routes)
     app.add_routes(routes_admin.routes)
+
+    # Optional feature modules (provided by independent workstreams).
+    from importlib import import_module
+
+    for module_name in (
+        "routes_memory_settings",
+        "routes_memory_notes",
+        "routes_models",
+    ):
+        try:
+            module = import_module(f".{module_name}", __package__)
+        except ModuleNotFoundError as exc:
+            if exc.name == f"{__package__}.{module_name}":
+                continue
+            raise
+        app.add_routes(module.routes)
     app.router.add_get("/", root_redirect)
     app.router.add_get("/console", root_redirect)
     app.router.add_get("/console/{tail:.*}", console_static)

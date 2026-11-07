@@ -85,6 +85,8 @@ export interface Template {
   name: string
   /** AstrBot configuration profile this template clones (default: "default"). */
   base_conf_id?: string
+  /** 管理端模型目录中的模型配置 id；空字符串表示沿用 base_conf_id 的模型。 */
+  model_profile_id?: string
   description: string
   persona_prompt: string
   begin_dialogs: string[]
@@ -102,6 +104,7 @@ export interface Template {
 export interface TemplateInput {
   name: string
   base_conf_id?: string
+  model_profile_id?: string
   description?: string
   persona_prompt?: string
   begin_dialogs?: string[]
@@ -306,6 +309,24 @@ export interface AdminBot extends Bot {
   owner_email: string
 }
 
+export interface ConversationMessage {
+  role: string
+  content: string
+}
+
+export interface AdminConversation {
+  id: string
+  platform_id: string
+  user_id: string
+  title: string
+  history: ConversationMessage[] | null
+  encrypted: boolean
+  decrypt_error: boolean
+  token_usage?: number
+  created_at: number
+  updated_at: number
+}
+
 export interface AuditLog {
   id: number | string
   actor_id: string
@@ -329,12 +350,27 @@ export interface Invite {
   created_at?: number
 }
 
+export interface EncryptionJob {
+  id: string
+  direction: 'decrypt' | 'encrypt'
+  status: 'queued' | 'running' | 'paused' | 'done' | 'failed'
+  total: number
+  done: number
+  percent: number
+  error?: string | null
+  created_at?: number
+  finished_at?: number
+}
+
 export interface EncryptionStatus {
   enabled: boolean
   state: EncryptionState
   done?: number
   total?: number
+  percent?: number
   eta?: number | null
+  changed_at?: number
+  job?: EncryptionJob | null
 }
 
 export interface VersionInfo {
@@ -412,4 +448,109 @@ export interface MemoryExportResult {
   exported_at: number
   count: number
   items: MemoryItem[]
+}
+
+/* ------------------------------------------------------------------ */
+/* 管理端内容查看 / 记忆 API 设置 / 模型与定价                            */
+/* ------------------------------------------------------------------ */
+
+export interface AdminConversationList {
+  items: AdminConversation[]
+  total: number
+}
+
+/** 管理端对话只读查看，不提供整库导出。 */
+export interface AdminContentTarget {
+  id: string
+  name: string
+}
+
+/** 记忆 API 设置：embedding / rerank 的 api_key 永远是掩码或空串。 */
+export interface MemoryEmbeddingConfig {
+  enabled: boolean
+  base_url: string
+  api_key: string
+  model: string
+  dimensions: number
+  timeout_seconds: number
+  batch_size: number
+  has_api_key?: boolean
+}
+
+export interface MemoryRerankConfig {
+  enabled: boolean
+  base_url: string
+  api_key: string
+  model: string
+  top_n: number
+  timeout_seconds: number
+  has_api_key?: boolean
+}
+
+export interface MemoryBehaviorConfig {
+  vector_candidate_limit: number
+  rerank_candidate_limit: number
+  rrf_k: number
+  recall_top_k: number
+}
+
+export interface MemorySettings {
+  embedding: MemoryEmbeddingConfig
+  rerank: MemoryRerankConfig
+  behavior: MemoryBehaviorConfig
+}
+
+export type MemorySettingsKind = 'embedding' | 'rerank'
+
+/** PUT 为部分更新：只提交变更的 section，api_key 省略表示不修改。 */
+export interface MemorySettingsPatch {
+  embedding?: Partial<MemoryEmbeddingConfig>
+  rerank?: Partial<MemoryRerankConfig>
+  behavior?: Partial<MemoryBehaviorConfig>
+}
+
+export interface MemorySettingsTestPayload {
+  kind: MemorySettingsKind
+}
+
+export interface MemorySettingsTestResult {
+  ok: boolean
+  dim?: number
+  count?: number
+  message?: string
+}
+
+export interface ModelProfile {
+  id: string
+  name: string
+  provider: string
+  base_url: string
+  model: string
+  /** 服务端只返回掩码或空串，不回显明文。 */
+  api_key?: string
+  has_api_key?: boolean
+  points_per_1k_input: number
+  points_per_1k_output: number
+  currency: string
+  enabled: boolean
+  note: string
+  created_at?: number
+  updated_at?: number
+}
+
+export interface ModelProfileInput {
+  name: string
+  provider: string
+  base_url: string
+  model: string
+  api_key?: string
+  points_per_1k_input: number
+  points_per_1k_output: number
+  currency: string
+  enabled: boolean
+  note: string
+}
+
+export interface ModelProfileList {
+  items: ModelProfile[]
 }

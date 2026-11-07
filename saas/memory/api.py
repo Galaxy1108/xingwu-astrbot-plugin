@@ -13,15 +13,19 @@ __all__ = ["MemoryAPI", "MemoryValidationError", "MemoryDraft", "Turn"]
 class MemoryAPI:
     """Thin facade used by HTTP routes and LLM tools; never touches SQL."""
 
-    def __init__(self, service: MemoryService) -> None:
+    def __init__(self, service: MemoryService, *, notes_factory=None) -> None:
         self.service = service
+        self._notes_factory = notes_factory
 
+    # -- memories ------------------------------------------------------
     def remember(
         self,
         bot_id: str,
         content: str,
         *,
         kind: str | None = None,
+        memory_type: str | None = None,
+        strength: int | None = None,
         tags: list[str] | None = None,
         importance: int | None = None,
         reasoning: str = "",
@@ -34,7 +38,9 @@ class MemoryAPI:
             bot_id,
             MemoryDraft(
                 content=content,
-                kind=kind or "fact",
+                kind=kind or memory_type or "knowledge",
+                memory_type=memory_type or "",
+                strength=50 if strength is None else strength,
                 tags=tags or [],
                 importance=importance or 3,
                 reasoning=reasoning,
@@ -50,7 +56,7 @@ class MemoryAPI:
         bot_id: str,
         query: str,
         *,
-        top_k: int = 5,
+        top_k: int | None = None,
         kind: str | None = None,
         token_budget: int | None = None,
     ) -> list[dict[str, Any]]:
@@ -94,6 +100,99 @@ class MemoryAPI:
     ) -> list[dict[str, Any]]:
         return await self.service.extract_and_remember(bot_id, turns, max_items=max_items)
 
+    # -- notes ---------------------------------------------------------
+    def note_service(self, bot_id: str):
+        """Lazily open the note library that shares the bot's memory database."""
+        if self._notes_factory is not None:
+            return self._notes_factory(bot_id)
+        from .notes import notes_for_store
+
+        return notes_for_store(
+            self.service.store, bot_id, clock=self.service.clock
+        )
+
+    def note_create(
+        self,
+        bot_id: str,
+        title: str,
+        content: str,
+        *,
+        tags: list[str] | None = None,
+    ) -> dict[str, Any]:
+        return self.note_service(bot_id).create(title, content, tags=tags)
+
+    def note_read(
+        self,
+        bot_id: str,
+        short_id: str,
+        *,
+        offset: int = 0,
+        limit: int = 4000,
+    ) -> dict[str, Any]:
+        return self.note_service(bot_id).read(short_id, offset=offset, limit=limit)
+
+    def note_list(
+        self,
+        bot_id: str,
+        *,
+        page: int = 1,
+        page_size: int = 20,
+        tag: str | None = None,
+        q: str | None = None,
+    ) -> dict[str, Any]:
+        return self.note_service(bot_id).list(
+            page=page, page_size=page_size, tag=tag, q=q
+        )
+
+    def note_get(self, bot_id: str, short_id: str) -> dict[str, Any]:
+        return self.note_service(bot_id).get(short_id)
+
+    def note_update(
+        self, bot_id: str, short_id: str, patch: dict[str, Any]
+    ) -> dict[str, Any]:
+        return self.note_service(bot_id).update(short_id, patch)
+
+    def note_delete(self, bot_id: str, short_id: str) -> None:
+        self.note_service(bot_id).delete(short_id)
+
+    # -- consolidation / snapshots ------------------------------------
+    def consolidate(self, bot_id: str, *, dry_run: bool = False) -> dict[str, Any]:
+        from .consolidation import MemoryConsolidator
+
+        consolidator = MemoryConsolidator(
+            self.service.store,
+            clock=self.service.clock,
+            events=self.service.events,
+        )
+        return consolidator.consolidate_bot(bot_id, dry_run=dry_run)
+
+    def consolidate_bot(self, bot_id: str, *, dry_run: bool = False) -> dict[str, Any]:
+        """Alias matching the consolidation module's public function name."""
+        return self.consolidate(bot_id, dry_run=dry_run)
+
+    def export_snapshot(self, bot_id: str) -> dict[str, Any]:
+        from .export import export_snapshot
+
+        try:
+            notes = self.note_service(bot_id)
+        except Exception:  # noqa: BLE001 - export must work without notes too
+            notes = None
+        return export_snapshot(self.service, bot_id, notes=notes)
+
+    def import_snapshot(
+        self, bot_id: str, snapshot: dict[str, Any], *, dry_run: bool = False
+    ) -> dict[str, Any]:
+        from .export import import_snapshot
+
+        try:
+            notes = self.note_service(bot_id)
+        except Exception:  # noqa: BLE001
+            notes = None
+        return import_snapshot(
+            self.service, bot_id, snapshot, notes=notes, dry_run=dry_run
+        )
+
+    # -- prompt formatting ---------------------------------------------
     @staticmethod
     def kinds() -> dict[str, str]:
         return dict(KIND_LABELS)
