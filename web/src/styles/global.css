@@ -191,6 +191,21 @@ a:hover {
 .v-btn {
   text-transform: none !important;
   letter-spacing: 0 !important;
+  font-weight: 500;
+}
+
+/* AstrBot 的描边按钮是浅灰细边，不是黑色硬边框 */
+.v-btn--variant-outlined {
+  border-color: rgba(0, 0, 0, 0.16) !important;
+}
+
+.v-btn--variant-outlined:hover {
+  border-color: rgba(60, 150, 202, 0.5) !important;
+  color: rgb(var(--v-theme-primary)) !important;
+}
+
+.v-btn--variant-flat.bg-primary {
+  box-shadow: none;
 }
 
 /*

@@ -30,7 +30,7 @@ export const vuetify = createVuetify({
   },
   defaults: {
     global: { ripple: true },
-    VBtn: { rounded: 'sm', density: 'comfortable' },
+    VBtn: { density: 'comfortable' },
     VCard: { rounded: 'lg', elevation: 0, border: true },
     VTextField: { variant: 'outlined', density: 'comfortable', color: 'primary', rounded: 'lg', hideDetails: 'auto' },
     VSelect: { variant: 'outlined', density: 'comfortable', color: 'primary', rounded: 'lg', hideDetails: 'auto' },

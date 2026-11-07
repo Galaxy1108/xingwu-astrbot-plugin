@@ -9,7 +9,7 @@
         </p>
       </div>
       <div class="page-actions">
-        <v-btn variant="outlined" size="small" prepend-icon="mdi-refresh" :loading="loading" @click="reload">
+        <v-btn variant="text" size="small" prepend-icon="mdi-refresh" :loading="loading" @click="reload">
           刷新
         </v-btn>
         <v-btn color="primary" variant="flat" size="small" prepend-icon="mdi-qrcode-scan" to="/connect">
