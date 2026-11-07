@@ -174,7 +174,7 @@
           登录即表示同意
           <a href="#" @click.prevent>服务条款</a> 与 <a href="#" @click.prevent>隐私政策</a>。
         </p>
-        <p class="version muted">AstrBot SaaS {{ auth.version || '0.3.0' }} · 加密记忆库</p>
+        <p class="version muted">AstrBot SaaS {{ auth.version || '0.4.0' }} · 加密记忆库</p>
       </div>
     </main>
 
