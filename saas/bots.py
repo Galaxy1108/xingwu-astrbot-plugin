@@ -456,6 +456,45 @@ class BotService:
             bot_id=bot_id, platform=platform, credentials=credentials
         )
 
+    # -- encryption switch: credentials --------------------------------
+    def convert_credentials(self, bot_id: str, *, decrypt: bool) -> int:
+        """Convert bot_bindings credentials between JSON bytes and ENC1 bytes."""
+        row = self.db.query_one(
+            "SELECT credential_cipher FROM bot_bindings WHERE bot_id = ?", (bot_id,)
+        )
+        if row is None or not row["credential_cipher"]:
+            return 0
+        blob = bytes(row["credential_cipher"])
+        is_plaintext = blob[:1] == b"{"
+        if decrypt and not is_plaintext:
+            bot = self._fetch(bot_id)
+            if bot is None:
+                return 0
+            cipher = self.tenants.get(bot["user_id"])
+            plaintext = cipher.decrypt_bytes(
+                blob, bot_id=bot_id, purpose="credential", record_id=bot_id
+            )
+            assert plaintext[:1] == b"{"
+            self.db.execute(
+                "UPDATE bot_bindings SET credential_cipher = ? WHERE bot_id = ?",
+                (plaintext, bot_id),
+            )
+            return 1
+        if not decrypt and is_plaintext:
+            bot = self._fetch(bot_id)
+            if bot is None:
+                return 0
+            cipher = self.tenants.get(bot["user_id"])
+            encrypted = cipher.encrypt_bytes(
+                blob, bot_id=bot_id, purpose="credential", record_id=bot_id
+            )
+            self.db.execute(
+                "UPDATE bot_bindings SET credential_cipher = ? WHERE bot_id = ?",
+                (encrypted, bot_id),
+            )
+            return 1
+        return 0
+
     def mark_ready(self, bot_id: str) -> dict[str, Any]:
         self.db.execute(
             "UPDATE bots SET status = 'ready', updated_at = ?, last_active_at = ? "

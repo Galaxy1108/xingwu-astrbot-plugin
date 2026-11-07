@@ -101,6 +101,21 @@ class KeyManager:
         """Server-side secret derived from the KEK (OTP/invite pepper, etc.)."""
         return _hkdf(self.load_kek(), salt=b"saas/secret/v1", info=info, length=length)
 
+    # -- generic wrapped blobs (platform settings etc.) ----------------
+    def wrap(self, plaintext: bytes, *, aad: bytes) -> bytes:
+        nonce = secrets.token_bytes(NONCE_BYTES)
+        sealed = AESGCM(self.load_kek()).encrypt(nonce, plaintext, aad)
+        return nonce + sealed
+
+    def unwrap(self, blob: bytes, *, aad: bytes) -> bytes:
+        if len(blob) <= NONCE_BYTES:
+            raise CryptoError("密文损坏")
+        nonce, sealed = blob[:NONCE_BYTES], blob[NONCE_BYTES:]
+        try:
+            return AESGCM(self.load_kek()).decrypt(nonce, sealed, aad)
+        except InvalidTag as exc:
+            raise CryptoError("解封失败（KEK 不匹配或数据损坏）") from exc
+
     # -- tenant key wrapping -------------------------------------------
     def _wrap_aad(self, tenant_id: str, key_version: int) -> bytes:
         return f"tenant:{tenant_id}:v{key_version}".encode()

@@ -249,6 +249,27 @@ async def import_memories(request: web.Request) -> web.Response:
 
 # ------------------------------------------------------------ dev helpers
 # Enabled only when SAAS_DEV_MODE=true; used by the demo UI and E2E tests.
+@routes.post("/api/dev/bots/{bot_id}/conversations")
+async def dev_add_conversation(request: web.Request) -> web.Response:
+    container = container_of(request)
+    settings = settings_of(request)
+    if not settings.dev_mode:
+        raise NotFound()
+    user = current_user(request)
+    bot = container.bots.get_for_user(user["id"], request.match_info["bot_id"])
+    body = await request.json()
+    history = body.get("history")
+    if not isinstance(history, list):
+        history = [
+            {"role": "user", "content": str(body.get("content") or "你好")},
+            {"role": "assistant", "content": str(body.get("reply") or "你好，有什么可以帮你？")},
+        ]
+    cid = await container.conversations.add_conversation(
+        bot_id=bot["id"], history=history, title=str(body.get("title") or "测试对话")
+    )
+    return ok({"conversation_id": cid})
+
+
 @routes.post("/api/dev/qr/{bot_id}/confirm")
 async def dev_qr_confirm(request: web.Request) -> web.Response:
     container = container_of(request)

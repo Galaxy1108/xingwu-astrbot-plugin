@@ -273,7 +273,22 @@ Memory 对象：
 - `GET /api/wallet/usage?days=14` → `{ days, start, end, balance, total_in, total_out, points: [{date, delta, in, out, balance}], scope: "platform_points_ledger" }`（余额走势图）
 - `GET /api/wallet/ledger?page=1` → `{ "items": [{id,delta,type,ref,note,created_at}], "total": 0, "page": 1, "page_size": 20 }`
 - `GET /api/access-log?page=1` → `{ "items": [], "total": 0, "page": 1, "page_size": 20 }`
-- `GET /api/me/encryption` → `{ "enabled": true, "state": "encrypted", "done": 0, "total": 0, "eta": null }`
+- `GET /api/me/encryption` → `{ enabled, state, changed_at, done, total, percent, eta, job? }`
+  - `state ∈ encrypted | decrypting | plaintext | encrypting | paused`
+  - `job = {id,direction,status,total,done,percent,error,created_at,finished_at}`
+- `PUT /api/me/encryption` `{ "enabled": false, "confirm": "确认解密" }` → **202** + 同 GET 的状态；关闭必须输入「确认解密」，开启无需 confirm。
+- `GET /api/me/encryption/job` → 同上（轮询用）。
+- 关闭语义：对用户全部 Bot 执行 对话解密回填 + 记忆库 SQLCipher→普通 SQLite + 凭据解密；开启反向执行。
+  同一用户同时只允许一个任务，重复提交 409。
+
+## 4.1 管理端内容查看（M3，每次访问写 content_access_logs）
+
+- `GET /api/admin/bots/{id}/conversations` → `{items:[{id,title,history:[{role,content}],encrypted,decrypt_error,created_at,updated_at}],total}`
+- `GET /api/admin/bots/{id}/memories?page=&q=&kind=` → 同上记忆分页结构
+- `PATCH /api/admin/bots/{id}/memories/{mid}` / `DELETE ...` → 管理员编辑/软删记忆（均留痕）
+- `POST /api/admin/bots/{id}/memories/export` `{ "confirm": true }` → 导出 JSON（二次确认 + 审计）
+- 用户侧 `GET /api/access-log` 可看到这些访问记录。
+- `GET/PUT /api/admin/users/{id}/encryption`：GET 同用户状态；PUT 只允许 `{enabled:true}`（强制开启），关闭返回 403。
 
 ## 5. 管理端（`role=admin`；否则 403）
 

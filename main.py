@@ -15,9 +15,10 @@ from astrbot.api import AstrBotConfig, logger
 from astrbot.api.star import Context, Star
 from astrbot.core.star.star_tools import StarTools
 
-from .saas.astrbot_adapter import AstrBotAdapter
+from .saas.astrbot_adapter import AstrBotAdapter, AstrBotConversationBackend
 from .saas.config import Settings
 from .saas.container import Container
+from .saas.conversation_patch import ConversationEncryptionPatch
 from .saas.memory.tools.llm_tools import TOOL_DEFINITIONS, dispatch as dispatch_memory_tool
 from .saas.tenancy import parse_bot_id_from_umo
 from .saas.web.app import create_app
@@ -34,13 +35,18 @@ class SaaSBotPlugin(Star):
         self._data_dir = Path(StarTools.get_data_dir(PLUGIN_NAME))
         self.settings = Settings.from_astrbot_config(self._data_dir, self.config)
         self.container: Container | None = None
+        self.conversation_patch: ConversationEncryptionPatch | None = None
         self._runner = None
         self._server_task: asyncio.Task | None = None
         self._gc_task: asyncio.Task | None = None
         try:
             self.container = Container(
-                self.settings, port=AstrBotAdapter(context)
+                self.settings,
+                port=AstrBotAdapter(context),
+                conversation_backend=AstrBotConversationBackend(context),
             )
+            self.conversation_patch = ConversationEncryptionPatch(self.container)
+            self.conversation_patch.install()
         except Exception:
             logger.error("SaaS 核心初始化失败（控制台不会启动）", exc_info=True)
             return
@@ -183,5 +189,10 @@ class SaaSBotPlugin(Star):
                 await self._runner.cleanup()
             except Exception:
                 logger.warning("控制台清理失败", exc_info=True)
+        if self.conversation_patch is not None:
+            try:
+                self.conversation_patch.uninstall()
+            except Exception:
+                logger.warning("对话加密补丁卸载失败", exc_info=True)
         if self.container is not None:
             self.container.close()

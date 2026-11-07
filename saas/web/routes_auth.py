@@ -170,19 +170,54 @@ async def access_log(request: web.Request) -> web.Response:
     )
 
 
+def _encryption_payload(container, user_id: str) -> dict:
+    status = container.encryption.status(user_id)
+    job = status.get("job") or {}
+    return {
+        "enabled": status["enabled"],
+        "state": status["state"],
+        "changed_at": status.get("changed_at"),
+        "done": job.get("done", 0),
+        "total": job.get("total", 0),
+        "percent": job.get("percent", 0),
+        "eta": None,
+        "job": job or None,
+    }
+
+
 @routes.get("/api/me/encryption")
 async def my_encryption(request: web.Request) -> web.Response:
     container = container_of(request)
     user = current_user(request)
-    return ok(
-        {
-            "enabled": bool(user.get("encryption_enabled", 1)),
-            "state": user.get("encryption_state", "encrypted"),
-            "done": 0,
-            "total": 0,
-            "eta": None,
-        }
+    return ok(_encryption_payload(container, user["id"]))
+
+
+@routes.get("/api/me/encryption/job")
+async def my_encryption_job(request: web.Request) -> web.Response:
+    container = container_of(request)
+    user = current_user(request)
+    return ok(_encryption_payload(container, user["id"]))
+
+
+@routes.put("/api/me/encryption")
+async def set_my_encryption(request: web.Request) -> web.Response:
+    body = await request.json()
+    container = container_of(request)
+    user = current_user(request)
+    enabled = bool(body.get("enabled", True))
+    if not enabled:
+        confirm = str(body.get("confirm") or "").strip()
+        if confirm != "确认解密":
+            raise ValidationError("请输入「确认解密」以继续", field="confirm")
+    status = await container.encryption.start(
+        user_id=user["id"],
+        enabled=enabled,
+        actor_id=user["id"],
+        actor_role="user",
+        ip=client_ip(request),
     )
+    response = ok(_encryption_payload(container, user["id"]), status=202)
+    return response
 
 
 # ---------------------------------------------------------------- misc

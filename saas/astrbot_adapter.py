@@ -57,6 +57,39 @@ def _deep_merge(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
     return merged
 
 
+class AstrBotConversationBackend:
+    """Conversation access through AstrBot's SQLModel database."""
+
+    def __init__(self, context: Any) -> None:
+        self.context = context
+        self.db = context.get_db()
+
+    async def list(self, platform_id: str | None = None):
+        from .conversations import ConversationRecord
+
+        convs = await self.db.get_conversations(platform_id=platform_id)
+        items = []
+        for conv in convs:
+            created = getattr(conv, "created_at", 0)
+            updated = getattr(conv, "updated_at", 0)
+            items.append(
+                ConversationRecord(
+                    cid=str(conv.conversation_id),
+                    platform_id=str(conv.platform_id),
+                    user_id=str(conv.user_id),
+                    title=str(conv.title or ""),
+                    content=conv.content,
+                    token_usage=int(getattr(conv, "token_usage", 0) or 0),
+                    created_at=int(created.timestamp()) if hasattr(created, "timestamp") else int(created or 0),
+                    updated_at=int(updated.timestamp()) if hasattr(updated, "timestamp") else int(updated or 0),
+                )
+            )
+        return items
+
+    async def update_content(self, cid: str, content) -> None:
+        await self.db.update_conversation(cid, content=content)
+
+
 class AstrBotAdapter:
     """Implements :class:`saas.ports.AstrBotPort` against a live AstrBot context."""
 

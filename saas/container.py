@@ -7,6 +7,8 @@ from pathlib import Path
 
 from .audit import AuditService
 from .billing import BillingService
+from .conversations import ConversationService, FakeConversationBackend
+from .encryption import EncryptionService
 from .auth import AuthService, InviteService, OtpService, SessionService, TenantKeyService
 from .bots import BotService
 from .clock import Clock, SystemClock
@@ -22,6 +24,7 @@ from .memory.storage.sqlcipher import MemoryStorage, MemoryStorageError
 from .memory.store import SqlCipherMemoryStore
 from .ports import AstrBotPort
 from .qr import QrService
+from .settings_store import SettingsStore
 from .templates import TemplateService
 
 logger = logging.getLogger(__name__)
@@ -37,6 +40,7 @@ class Container:
         port: AstrBotPort | None = None,
         clock: Clock | None = None,
         memory_plaintext: bool = False,
+        conversation_backend=None,
     ) -> None:
         self.settings = settings
         self.settings.ensure_dirs()
@@ -80,6 +84,7 @@ class Container:
             mailer=self.mailer,
             clock=self.clock,
         )
+        self.settings_store = SettingsStore(self.db, self.key_manager, self.clock)
         self.templates = TemplateService(self.db, self.clock)
         self.billing = BillingService(self.db, audit=self.audit, clock=self.clock)
         self.memory_storage = MemoryStorage(
@@ -96,6 +101,7 @@ class Container:
         )
         self.memory_api = MemoryAPI(self.memory_service)
         self.port: AstrBotPort = port or FakeAstrBot()
+        self.conversation_backend = conversation_backend or FakeConversationBackend()
         self.bots = BotService(
             self.db,
             port=self.port,
@@ -107,6 +113,12 @@ class Container:
             audit=self.audit,
             clock=self.clock,
         )
+        self.conversations = ConversationService(
+            self.conversation_backend,
+            db=self.db,
+            tenants=self.tenants,
+            clock=self.clock,
+        )
         self.qr = QrService(
             port=self.port,
             bots=self.bots,
@@ -114,6 +126,7 @@ class Container:
             audit=self.audit,
             clock=self.clock,
         )
+        self.encryption = EncryptionService(self)
         logger.info(
             "SaaS 核心已初始化：data=%s, memory=%s, port=%s",
             settings.data_dir,

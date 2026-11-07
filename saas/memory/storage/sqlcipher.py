@@ -190,6 +190,95 @@ class MemoryStorage:
                 )
         return self.relative_path(bot_id)
 
+    # -- plaintext <-> SQLCipher conversion (M3 encryption switch) ------
+    def is_encrypted(self, bot_id: str) -> bool:
+        path = self.path_for(bot_id)
+        if not path.exists():
+            return False
+        return not path.read_bytes()[:16].startswith(b"SQLite format 3")
+
+    def _replace(self, target: Path, source: Path) -> None:
+        os.replace(source, target)
+        for suffix in ("-wal", "-shm", "-journal"):
+            try:
+                Path(str(target) + suffix).unlink()
+            except FileNotFoundError:
+                pass
+
+    def to_plaintext(self, bot_id: str, key: bytes) -> bool:
+        """SQLCipher -> plain SQLite via ``sqlcipher_export`` (in place).
+
+        Returns True when a conversion happened, False when already plaintext.
+        """
+        path = self.path_for(bot_id)
+        if not path.exists() or not self.encrypted or not self.is_encrypted(bot_id):
+            return False
+        tmp = path.with_suffix(".plain.tmp")
+        if tmp.exists():
+            tmp.unlink()
+        import sqlcipher3
+
+        conn = sqlcipher3.connect(str(path))
+        try:
+            conn.execute(f'PRAGMA key = "x\'{key.hex()}\'";')
+            conn.execute(f"ATTACH DATABASE '{tmp}' AS plaintext KEY '';")
+            conn.execute("SELECT sqlcipher_export('plaintext');")
+            conn.execute("DETACH DATABASE plaintext;")
+            conn.commit()
+        finally:
+            conn.close()
+        self._replace(path, tmp)
+        check = sqlite3.connect(str(path))
+        try:
+            check.execute(
+                "INSERT OR REPLACE INTO meta(key, value) VALUES ('backend', 'plaintext')"
+            )
+            check.commit()
+        finally:
+            check.close()
+        return True
+
+    def to_encrypted(self, bot_id: str, key: bytes) -> bool:
+        """Plain SQLite -> SQLCipher via ``sqlcipher_export`` (in place)."""
+        path = self.path_for(bot_id)
+        if not path.exists():
+            return False
+        if not self.encrypted:
+            raise MemoryStorageError("当前环境没有 SQLCipher，无法加密记忆库")
+        if self.is_encrypted(bot_id):
+            return False
+        tmp = path.with_suffix(".enc.tmp")
+        if tmp.exists():
+            tmp.unlink()
+        import sqlcipher3
+
+        # Open the plaintext library through SQLCipher with an empty key, then
+        # export into a keyed database.
+        conn = sqlcipher3.connect(str(path))
+        try:
+            conn.execute(
+                f"ATTACH DATABASE '{tmp}' AS encrypted KEY \"x'{key.hex()}'\";"
+            )
+            conn.execute("SELECT sqlcipher_export('encrypted');")
+            conn.execute("DETACH DATABASE encrypted;")
+            conn.commit()
+        finally:
+            conn.close()
+        check = sqlcipher3.connect(str(tmp))
+        try:
+            check.execute(f'PRAGMA key = "x\'{key.hex()}\'";')
+            check.execute(
+                "INSERT OR REPLACE INTO meta(key, value) VALUES ('backend', 'sqlcipher')"
+            )
+            check.commit()
+        finally:
+            check.close()
+        if tmp.read_bytes()[:16].startswith(b"SQLite format 3"):
+            tmp.unlink()
+            raise MemoryStorageError("记忆库加密失败（导出文件仍为明文）")
+        self._replace(path, tmp)
+        return True
+
     def delete_library(self, bot_id: str) -> None:
         self._remove_files(self.path_for(bot_id))
 
@@ -208,9 +297,13 @@ class MemoryStorage:
 
     # -- M2 placeholder -------------------------------------------------
     def open_library(self, bot_id: str, *, key: bytes | None = None) -> sqlite3.Connection:
-        """Open an existing library (used by the M2 repository)."""
+        """Open an existing library; auto-detect plaintext vs SQLCipher."""
         path = self.path_for(bot_id)
         if not path.exists():
             raise MemoryStorageError(f"记忆库不存在：{path.name}")
+        if not self.is_encrypted(bot_id):
+            conn = sqlite3.connect(str(path))
+            conn.row_factory = dict_row_factory
+            return conn
         return self._connect(bot_id, key)
 

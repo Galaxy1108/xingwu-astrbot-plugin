@@ -320,6 +320,119 @@ async def admin_access_log(request: web.Request) -> web.Response:
 
 
 # -------------------------------------------------------------- encryption
+def _log_access(container, admin, bot_row, resource, resource_id, ip, reason=""):
+    container.db.execute(
+        "INSERT INTO content_access_logs(admin_id, user_id, bot_id, resource, "
+        "resource_id, reason, ip, created_at) VALUES (?,?,?,?,?,?,?,?)",
+        (
+            admin["id"],
+            bot_row["user_id"],
+            bot_row["id"],
+            resource,
+            resource_id,
+            reason,
+            ip,
+            container.clock.now(),
+        ),
+    )
+
+
+@routes.get("/api/admin/bots/{bot_id}/conversations")
+async def admin_bot_conversations(request: web.Request) -> web.Response:
+    admin = require_admin(request)
+    container = container_of(request)
+    bot_id = request.match_info["bot_id"]
+    row = container.db.query_one("SELECT * FROM bots WHERE id = ?", (bot_id,))
+    if row is None or row["status"] == "deleted":
+        raise AppError("Bot 不存在", code="not_found", status=404)
+    items = await container.conversations.list_for_bot(bot_id, decrypt=True)
+    _log_access(
+        container, admin, row, "conversation", bot_id, client_ip(request)
+    )
+    return ok({"items": items, "total": len(items)})
+
+
+@routes.get("/api/admin/bots/{bot_id}/memories")
+async def admin_bot_memories(request: web.Request) -> web.Response:
+    admin = require_admin(request)
+    container = container_of(request)
+    bot_id = request.match_info["bot_id"]
+    row = container.db.query_one("SELECT * FROM bots WHERE id = ?", (bot_id,))
+    if row is None or row["status"] == "deleted":
+        raise AppError("Bot 不存在", code="not_found", status=404)
+    page, page_size = _paging(request)
+    data = container.memory_api.list(
+        bot_id,
+        page=page,
+        page_size=page_size,
+        kind=(request.query.get("kind") or "").strip() or None,
+        q=(request.query.get("q") or "").strip() or None,
+    )
+    _log_access(container, admin, row, "memory", bot_id, client_ip(request))
+    return ok(data)
+
+
+@routes.patch("/api/admin/bots/{bot_id}/memories/{memory_id}")
+async def admin_patch_memory(request: web.Request) -> web.Response:
+    admin = require_admin(request)
+    container = container_of(request)
+    bot_id = request.match_info["bot_id"]
+    row = container.db.query_one("SELECT * FROM bots WHERE id = ?", (bot_id,))
+    if row is None or row["status"] == "deleted":
+        raise AppError("Bot 不存在", code="not_found", status=404)
+    body = await request.json()
+    from ..memory.service import MemoryValidationError
+
+    try:
+        item = container.memory_api.update(bot_id, int(request.match_info["memory_id"]), body)
+    except (MemoryValidationError, ValueError) as exc:
+        raise ValidationError(str(exc)) from None
+    _log_access(
+        container, admin, row, "memory", request.match_info["memory_id"], client_ip(request), "edit"
+    )
+    return ok({"memory": item})
+
+
+@routes.delete("/api/admin/bots/{bot_id}/memories/{memory_id}")
+async def admin_delete_memory(request: web.Request) -> web.Response:
+    admin = require_admin(request)
+    container = container_of(request)
+    bot_id = request.match_info["bot_id"]
+    row = container.db.query_one("SELECT * FROM bots WHERE id = ?", (bot_id,))
+    if row is None or row["status"] == "deleted":
+        raise AppError("Bot 不存在", code="not_found", status=404)
+    container.memory_api.delete(bot_id, int(request.match_info["memory_id"]))
+    _log_access(
+        container, admin, row, "memory", request.match_info["memory_id"], client_ip(request), "delete"
+    )
+    return ok({"deleted": True})
+
+
+@routes.post("/api/admin/bots/{bot_id}/memories/export")
+async def admin_export_memories(request: web.Request) -> web.Response:
+    admin = require_admin(request)
+    body = await request.json()
+    if not body.get("confirm"):
+        raise ValidationError("导出需要二次确认", field="confirm")
+    container = container_of(request)
+    bot_id = request.match_info["bot_id"]
+    row = container.db.query_one("SELECT * FROM bots WHERE id = ?", (bot_id,))
+    if row is None or row["status"] == "deleted":
+        raise AppError("Bot 不存在", code="not_found", status=404)
+    data = container.memory_api.export(bot_id)
+    _log_access(container, admin, row, "memory_export", bot_id, client_ip(request), "export")
+    container.audit.log(
+        actor_id=admin["id"],
+        actor_role="admin",
+        action="memory.exported",
+        target_type="bot",
+        target_id=bot_id,
+        ip=client_ip(request),
+        detail={"count": data.get("count", 0)},
+    )
+    return ok(data)
+
+
 @routes.get("/api/admin/users/{user_id}/encryption")
 async def admin_user_encryption(request: web.Request) -> web.Response:
     require_admin(request)
@@ -327,13 +440,8 @@ async def admin_user_encryption(request: web.Request) -> web.Response:
     user = container.auth.get_user(request.match_info["user_id"])
     if user is None:
         raise AppError("用户不存在", code="not_found", status=404)
-    return ok(
-        {
-            "user_id": user["id"],
-            "enabled": bool(user.get("encryption_enabled", 1)),
-            "state": user.get("encryption_state", "encrypted"),
-        }
-    )
+    status = container.encryption.status(user["id"])
+    return ok({"user_id": user["id"], **status})
 
 
 @routes.put("/api/admin/users/{user_id}/encryption")
@@ -348,10 +456,13 @@ async def admin_set_encryption(request: web.Request) -> web.Response:
     user = container.auth.get_user(user_id)
     if user is None:
         raise AppError("用户不存在", code="not_found", status=404)
-    container.db.execute(
-        "UPDATE users SET encryption_enabled = 1, encryption_state = 'encrypted', "
-        "encryption_changed_at = ?, encryption_changed_by = ? WHERE id = ?",
-        (container.clock.now(), admin["id"], user_id),
+    status = await container.encryption.start(
+        user_id=user_id,
+        enabled=True,
+        actor_id=admin["id"],
+        actor_role="admin",
+        ip=client_ip(request),
+        reason="admin_force_enable",
     )
     container.audit.log(
         actor_id=admin["id"],
@@ -361,7 +472,7 @@ async def admin_set_encryption(request: web.Request) -> web.Response:
         target_id=user_id,
         ip=client_ip(request),
     )
-    return ok({"user_id": user_id, "enabled": True, "state": "encrypted"})
+    return ok({"user_id": user_id, **status})
 
 
 # ------------------------------------------------------------------ orders
