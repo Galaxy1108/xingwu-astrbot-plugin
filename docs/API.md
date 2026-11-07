@@ -98,7 +98,7 @@
 
 ```json
 {
-  "user": { "id": "u_...", "email": "a@b.com", "role": "user", "status": "active",
+  "user": { "id": "u_...", "email": "a@b.com", "display_name": "小明", "role": "user", "status": "active",
             "created_at": 1700000000,
             "encryption": { "enabled": true, "state": "encrypted" } },
   "is_new": true,
@@ -128,6 +128,14 @@
 ```
 
 未登录 → 401。
+
+### PATCH /api/me/profile
+
+```json
+{ "display_name": "小明" }
+```
+
+`200 { "user": { ... } }`；用户名 1–32 字符，写审计。
 
 ## 2. 模板（用户可见）
 
@@ -267,7 +275,9 @@ Memory 对象：
   - 部分更新；`tags` / `metadata` 为**全量替换**；`kind ∈ fact|preference|event|note`；`importance ∈ 1..5`。
 - `DELETE /api/bots/{id}/memories/{mid}` → `{ "deleted": true }`（软删）
 - `POST /api/bots/{id}/memories/search` `{q, kind?, limit?}` → `{items,total,page,page_size}`
-- `POST /api/bots/{id}/memories/export` → `{bot_id, exported_at, count, items}`（前端下载 JSON）
+- `POST /api/bots/{id}/memories/export` → 快照 `{version,bot_id,exported_at,count,memories,tags,notes_count,notes}`（前端下载 JSON）
+- `POST /api/bots/{id}/memories/import` `{snapshot|{...snapshot}, dry_run?}` → 导入报告（幂等，按内容/short_id 去重）
+- 管理端同上，但需内容确认：`POST /api/admin/bots/{id}/memories/import`
 - `POST /api/bots/{id}/memories/import` → M2 暂 501（导入走 CLI：`saas/memory/migration/from_angel.py`）
 
 ## 3.2 记忆笔记（天使之魂对标）

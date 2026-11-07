@@ -231,20 +231,31 @@ async def search_memories(request: web.Request) -> web.Response:
 
 @routes.post("/api/bots/{bot_id}/memories/export")
 async def export_memories(request: web.Request) -> web.Response:
+    from ..memory.export import export_bot
+
     container = container_of(request)
     bot = _memory_store(container, request)
-    return ok(container.memory_api.export(bot["id"]))
+    return ok(export_bot(container.memory_api, bot["id"]))
 
 
 @routes.post("/api/bots/{bot_id}/memories/import")
 async def import_memories(request: web.Request) -> web.Response:
+    from ..memory.export import import_bot
+
     container = container_of(request)
     bot = _memory_store(container, request)
-    raise AppError(
-        "从 angel_memory 导入需在管理端执行（M2 提供 CLI：saas/memory/migration/from_angel.py）",
-        code="not_implemented",
-        status=501,
-    )
+    body = await request.json()
+    snapshot = body.get("snapshot") if isinstance(body.get("snapshot"), dict) else body
+    try:
+        report = import_bot(
+            container.memory_api,
+            bot["id"],
+            snapshot,
+            dry_run=bool(body.get("dry_run")),
+        )
+    except ValueError as exc:
+        raise ValidationError(str(exc), field="snapshot") from None
+    return ok(report)
 
 
 # ------------------------------------------------------------ dev helpers

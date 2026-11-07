@@ -76,6 +76,7 @@ class AuthService:
         return {
             "id": user["id"],
             "email": user["email"],
+            "display_name": user.get("display_name") or user["email"].split("@")[0],
             "role": user["role"],
             "status": user["status"],
             "created_at": user["created_at"],
@@ -192,9 +193,18 @@ class AuthService:
             if invite_code and not self.settings.allow_public_signup:
                 self.invites.consume(invite_code)
             self.db.execute(
-                "INSERT INTO users(id, email, role, status, created_at, invite_code, "
-                "encryption_enabled, encryption_state) VALUES (?,?,?,?,?,?,1,'encrypted')",
-                (user_id, email, "user", "active", now, invite_hint),
+                "INSERT INTO users(id, email, display_name, role, status, created_at, "
+                "invite_code, encryption_enabled, encryption_state) "
+                "VALUES (?,?,?,?,?,?,?,1,'encrypted')",
+                (
+                    user_id,
+                    email,
+                    email.split("@")[0][:32],
+                    "user",
+                    "active",
+                    now,
+                    invite_hint,
+                ),
             )
             self.db.execute(
                 "INSERT INTO quotas(user_id, max_bots, monthly_tokens, max_memories, "
@@ -224,6 +234,29 @@ class AuthService:
             detail={"email": email},
         )
         return user
+
+    def update_display_name(
+        self, user_id: str, display_name: str, *, ip: str = ""
+    ) -> dict[str, Any]:
+        name = (display_name or "").strip()
+        if not name or len(name) > 32:
+            raise ValidationError("用户名需为 1–32 个字符", field="display_name")
+        user = self.get_user(user_id)
+        if user is None:
+            raise AppError("用户不存在", code="not_found", status=404)
+        self.db.execute(
+            "UPDATE users SET display_name = ? WHERE id = ?", (name, user_id)
+        )
+        self.audit.log(
+            actor_id=user_id,
+            actor_role=user.get("role", "user"),
+            action="user.profile_updated",
+            target_type="user",
+            target_id=user_id,
+            ip=ip,
+            detail={"display_name": name},
+        )
+        return self.get_user(user_id) or user
 
     def create_user(
         self, email: str, *, role: str = "user", invite_code: str = "", ip: str = ""

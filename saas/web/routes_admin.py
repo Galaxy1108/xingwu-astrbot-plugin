@@ -337,6 +337,31 @@ def _log_access(container, admin, bot_row, resource, resource_id, ip, reason="")
     )
 
 
+def _owner_encrypted(container, bot_row) -> bool:
+    user = container.db.query_one(
+        "SELECT encryption_enabled, encryption_state FROM users WHERE id = ?",
+        (bot_row["user_id"],),
+    )
+    if user is None:
+        return False
+    return bool(user["encryption_enabled"]) and user["encryption_state"] != "plaintext"
+
+
+def _require_content_confirm(request: web.Request, container, bot_row) -> bool:
+    """Encrypted tenants require an explicit confirmation before decryption."""
+    if not _owner_encrypted(container, bot_row):
+        return False
+    value = (request.query.get("confirm") or "").strip().lower()
+    if value in {"1", "true", "yes"}:
+        return True
+    raise AppError(
+        "对方已启用加密，确定要查看吗？这将解密内容并记录本次访问（用户可见）。",
+        code="confirmation_required",
+        status=403,
+        extra={"encrypted": True},
+    )
+
+
 @routes.get("/api/admin/bots/{bot_id}/conversations")
 async def admin_bot_conversations(request: web.Request) -> web.Response:
     admin = require_admin(request)
@@ -345,9 +370,25 @@ async def admin_bot_conversations(request: web.Request) -> web.Response:
     row = container.db.query_one("SELECT * FROM bots WHERE id = ?", (bot_id,))
     if row is None or row["status"] == "deleted":
         raise AppError("Bot 不存在", code="not_found", status=404)
+    confirmed = _require_content_confirm(request, container, row)
     items = await container.conversations.list_for_bot(bot_id, decrypt=True)
     _log_access(
-        container, admin, row, "conversation", bot_id, client_ip(request)
+        container,
+        admin,
+        row,
+        "conversation",
+        bot_id,
+        client_ip(request),
+        "confirmed_encrypted" if confirmed else "",
+    )
+    container.audit.log(
+        actor_id=admin["id"],
+        actor_role="admin",
+        action="content.accessed",
+        target_type="bot",
+        target_id=bot_id,
+        ip=client_ip(request),
+        detail={"resource": "conversation", "forced_decrypt": confirmed},
     )
     return ok({"items": items, "total": len(items)})
 
@@ -360,6 +401,7 @@ async def admin_bot_memories(request: web.Request) -> web.Response:
     row = container.db.query_one("SELECT * FROM bots WHERE id = ?", (bot_id,))
     if row is None or row["status"] == "deleted":
         raise AppError("Bot 不存在", code="not_found", status=404)
+    confirmed = _require_content_confirm(request, container, row)
     page, page_size = _paging(request)
     data = container.memory_api.list(
         bot_id,
@@ -368,7 +410,15 @@ async def admin_bot_memories(request: web.Request) -> web.Response:
         kind=(request.query.get("kind") or "").strip() or None,
         q=(request.query.get("q") or "").strip() or None,
     )
-    _log_access(container, admin, row, "memory", bot_id, client_ip(request))
+    _log_access(
+        container,
+        admin,
+        row,
+        "memory",
+        bot_id,
+        client_ip(request),
+        "confirmed_encrypted" if confirmed else "",
+    )
     return ok(data)
 
 
@@ -380,6 +430,7 @@ async def admin_patch_memory(request: web.Request) -> web.Response:
     row = container.db.query_one("SELECT * FROM bots WHERE id = ?", (bot_id,))
     if row is None or row["status"] == "deleted":
         raise AppError("Bot 不存在", code="not_found", status=404)
+    _require_content_confirm(request, container, row)
     body = await request.json()
     from ..memory.service import MemoryValidationError
 
@@ -401,6 +452,7 @@ async def admin_delete_memory(request: web.Request) -> web.Response:
     row = container.db.query_one("SELECT * FROM bots WHERE id = ?", (bot_id,))
     if row is None or row["status"] == "deleted":
         raise AppError("Bot 不存在", code="not_found", status=404)
+    _require_content_confirm(request, container, row)
     container.memory_api.delete(bot_id, int(request.match_info["memory_id"]))
     _log_access(
         container, admin, row, "memory", request.match_info["memory_id"], client_ip(request), "delete"
@@ -419,6 +471,7 @@ async def admin_export_memories(request: web.Request) -> web.Response:
     row = container.db.query_one("SELECT * FROM bots WHERE id = ?", (bot_id,))
     if row is None or row["status"] == "deleted":
         raise AppError("Bot 不存在", code="not_found", status=404)
+    _require_content_confirm(request, container, row)
     data = container.memory_api.export(bot_id)
     _log_access(container, admin, row, "memory_export", bot_id, client_ip(request), "export")
     container.audit.log(
@@ -431,6 +484,29 @@ async def admin_export_memories(request: web.Request) -> web.Response:
         detail={"count": data.get("count", 0)},
     )
     return ok(data)
+
+
+@routes.post("/api/admin/bots/{bot_id}/memories/import")
+async def admin_import_memories(request: web.Request) -> web.Response:
+    from ..memory.export import import_bot
+
+    admin = require_admin(request)
+    container = container_of(request)
+    bot_id = request.match_info["bot_id"]
+    row = container.db.query_one("SELECT * FROM bots WHERE id = ?", (bot_id,))
+    if row is None or row["status"] == "deleted":
+        raise AppError("Bot 不存在", code="not_found", status=404)
+    _require_content_confirm(request, container, row)
+    body = await request.json()
+    snapshot = body.get("snapshot") if isinstance(body.get("snapshot"), dict) else body
+    try:
+        report = import_bot(
+            container.memory_api, bot_id, snapshot, dry_run=bool(body.get("dry_run"))
+        )
+    except ValueError as exc:
+        raise ValidationError(str(exc), field="snapshot") from None
+    _log_access(container, admin, row, "memory_import", bot_id, client_ip(request))
+    return ok(report)
 
 
 @routes.get("/api/admin/users/{user_id}/encryption")

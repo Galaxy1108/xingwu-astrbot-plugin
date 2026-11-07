@@ -81,6 +81,7 @@ class Settings:
     dev_mode: bool = False
     otp_dev_echo: bool = False
     admin_email: str = ""
+    astrbot_dashboard_url: str = "http://127.0.0.1:6185"
     version: str = VERSION
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -166,6 +167,9 @@ class Settings:
         settings.otp_dev_echo = _env_bool("SAAS_OTP_DEV_ECHO", settings.otp_dev_echo)
         settings.dev_mode = _env_bool("SAAS_DEV_MODE", settings.dev_mode)
         settings.admin_email = _env_str("SAAS_ADMIN_EMAIL", settings.admin_email)
+        settings.astrbot_dashboard_url = _env_str(
+            "SAAS_ASTRBOT_DASHBOARD_URL", settings.astrbot_dashboard_url
+        )
         settings.smtp_host = _env_str("SAAS_SMTP_HOST", settings.smtp_host)
         settings.smtp_port = _env_int("SAAS_SMTP_PORT", settings.smtp_port)
         settings.smtp_user = _env_str("SAAS_SMTP_USER", settings.smtp_user)
@@ -214,6 +218,9 @@ class Settings:
         settings.otp_dev_echo = bool(val("otp_dev_echo", settings.otp_dev_echo))
         settings.dev_mode = bool(val("dev_mode", settings.dev_mode))
         settings.admin_email = str(val("initial_admin_email", settings.admin_email))
+        settings.astrbot_dashboard_url = str(
+            val("astrbot_dashboard_url", settings.astrbot_dashboard_url)
+        )
         settings.qr_ttl_seconds = int(val("qr_ttl_seconds", settings.qr_ttl_seconds))
         settings.qr_max_refreshes = int(
             val("qr_max_refreshes", settings.qr_max_refreshes)

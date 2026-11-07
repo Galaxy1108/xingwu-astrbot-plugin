@@ -106,6 +106,8 @@ async def me(request: web.Request) -> web.Response:
             "csrf_token": csrf_token,
             "limits": container.auth.quota_for(user["id"]),
             "version": settings.version,
+            "astrbot_dashboard_url": settings.astrbot_dashboard_url,
+            "is_admin": user.get("role") == "admin",
         }
     )
     _set_csrf_cookie(
@@ -183,6 +185,19 @@ def _encryption_payload(container, user_id: str) -> dict:
         "eta": None,
         "job": job or None,
     }
+
+
+@routes.patch("/api/me/profile")
+async def update_profile(request: web.Request) -> web.Response:
+    body = await request.json()
+    container = container_of(request)
+    user = current_user(request)
+    updated = container.auth.update_display_name(
+        user["id"],
+        str(body.get("display_name") or ""),
+        ip=client_ip(request),
+    )
+    return ok({"user": container.auth.public_user(updated)})
 
 
 @routes.get("/api/me/encryption")
