@@ -297,6 +297,9 @@ Memory 对象：
 - `GET /api/access-log?page=1` → `{ "items": [], "total": 0, "page": 1, "page_size": 20 }`
 - `GET /api/models` → `{items:[{id,name,provider,model,points_per_1k_input,points_per_1k_output,currency,note,...}]}`（仅 enabled，不含 key/base_url）
 - `GET /api/me/usage?page=&page_size=` → `{items,total,page,page_size,summary}`（summary 为近 30 天 tokens/points）
+- `GET /api/me/usage/daily?days=30&bot_id=` → `{days,start,end,bot_id,total_points,total_tokens,total_requests,points:[{date,points,tokens,requests}]}`
+  - 控制台「点数消耗」图使用该接口：展示**每日消耗**（不是余额变化），支持按 Bot 过滤。
+- `GET /api/me/usage/by-bot?days=30` → `{days,items:[{bot_id,bot_name,points,tokens,requests}]}`（Bot 用量排行/下拉）
 - `GET /api/me/encryption` → `{ enabled, state, changed_at, done, total, percent, eta, job? }`
   - `state ∈ encrypted | decrypting | plaintext | encrypting | paused`
   - `job = {id,direction,status,total,done,percent,error,created_at,finished_at}`

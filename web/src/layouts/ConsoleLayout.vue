@@ -86,6 +86,9 @@
     <v-app-bar-nav-icon v-if="isMobile" aria-label="打开导航" @click="drawerOpen = !drawerOpen" />
     <v-app-bar-title class="topbar-title">{{ currentTitle }}</v-app-bar-title>
     <v-spacer />
+    <v-btn icon variant="text" :aria-label="isDark ? '切换浅色主题' : '切换深色主题'" @click="toggleTheme">
+      <v-icon>{{ isDark ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}</v-icon>
+    </v-btn>
     <v-chip v-if="auth.isAdmin" size="small" variant="tonal" color="primary" class="mr-2">
       管理员
     </v-chip>
@@ -107,12 +110,14 @@ import { useRoute, useRouter } from 'vue-router'
 import { useDisplay } from 'vuetify'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
+import { useThemeMode } from '@/composables/useThemeMode'
 
 const auth = useAuthStore()
 const ui = useUiStore()
 const route = useRoute()
 const router = useRouter()
 const { smAndDown } = useDisplay()
+const { isDark, toggle: toggleTheme } = useThemeMode()
 
 const isMobile = computed(() => smAndDown.value)
 const drawerOpen = ref(!isMobile.value)
@@ -150,8 +155,8 @@ function refreshPage(): void {
 
 <style scoped>
 .console-drawer {
-  border-right: 1px solid rgba(0, 0, 0, 0.06);
-  background: #fff;
+  border-right: 1px solid var(--console-border);
+  background: var(--console-surface);
 }
 
 .sidebar-container {
@@ -187,7 +192,7 @@ function refreshPage(): void {
 
 .rail-toggle {
   margin-left: auto;
-  color: rgba(0, 0, 0, 0.45);
+  color: var(--console-text-muted);
 }
 
 .nav-list {
@@ -200,7 +205,7 @@ function refreshPage(): void {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(0, 0, 0, 0.45);
+  color: var(--console-text-muted);
 }
 
 :deep(.nav-item) {
@@ -229,7 +234,7 @@ function refreshPage(): void {
 }
 
 .sidebar-footer {
-  border-top: 1px solid rgba(0, 0, 0, 0.07);
+  border-top: 1px solid var(--console-border);
   padding: 10px 12px 12px;
 }
 
@@ -253,12 +258,12 @@ function refreshPage(): void {
 .version-line {
   padding: 4px 4px 0;
   font-size: 11px;
-  color: rgba(0, 0, 0, 0.38);
+  color: var(--console-text-muted);
 }
 
 .console-topbar {
-  border-bottom: 1px solid rgba(0, 0, 0, 0.07);
-  background: #fff;
+  border-bottom: 1px solid var(--console-border);
+  background: var(--console-surface);
 }
 
 .topbar-title {

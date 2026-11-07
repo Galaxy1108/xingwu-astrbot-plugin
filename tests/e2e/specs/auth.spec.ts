@@ -26,7 +26,7 @@ test.describe('认证与访问控制（浏览器）', () => {
       const url = new URL(page.url())
       expect(url.searchParams.get('redirect')).toBe('/bots')
       // 前端不得把会话/token 放进 localStorage
-      const storageKeys = await page.evaluate(() => Object.keys(window.localStorage))
+      const storageKeys = await page.evaluate(() => Object.keys(window.localStorage).filter((key) => key !== 'saas-theme'))
       expect(storageKeys).toEqual([])
     } finally {
       await context.close()
@@ -64,7 +64,7 @@ test.describe('认证与访问控制（浏览器）', () => {
       await expect(navLink(page, '我的 Bot')).toBeVisible()
       await expect(navLink(page, '总览')).toBeVisible()
       // 登录成功后同样不应有 localStorage token
-      const storageKeys = await page.evaluate(() => Object.keys(window.localStorage))
+      const storageKeys = await page.evaluate(() => Object.keys(window.localStorage).filter((key) => key !== 'saas-theme'))
       expect(storageKeys).toEqual([])
     } finally {
       await context.close()
@@ -91,7 +91,7 @@ test.describe('认证与访问控制（浏览器）', () => {
       // 触发一次前端 API：整页重载 → auth store fetchMe 收到 401 → 清 store → /login
       await page.reload()
       await expect(page).toHaveURL(/\/console\/login/, { timeout: 20_000 })
-      const storageKeys = await page.evaluate(() => Object.keys(window.localStorage))
+      const storageKeys = await page.evaluate(() => Object.keys(window.localStorage).filter((key) => key !== 'saas-theme'))
       expect(storageKeys).toEqual([])
       await expect(page.getByRole('heading', { name: '登录控制台' })).toBeVisible()
 

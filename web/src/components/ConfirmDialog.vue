@@ -195,7 +195,7 @@ function onConfirm(): void {
   padding: 10px 12px;
   font-size: 0.9rem;
   color: var(--console-text);
-  background: #fff;
+  background: var(--console-surface);
   border: 1px solid var(--console-border);
   border-radius: var(--console-radius);
   outline: none;

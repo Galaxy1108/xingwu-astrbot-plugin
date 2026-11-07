@@ -19,8 +19,10 @@
 
 <script setup lang="ts">
 import { useUiStore } from '@/stores/ui'
+import { useThemeMode } from '@/composables/useThemeMode'
 
 const ui = useUiStore()
+useThemeMode()
 </script>
 
 <style scoped>

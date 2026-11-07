@@ -242,6 +242,32 @@ export interface UsagePoint {
   balance: number
 }
 
+export interface UsageDailyPoint {
+  date: string
+  points: number
+  tokens: number
+  requests: number
+}
+
+export interface UsageDaily {
+  days: number
+  start: string
+  end: string
+  bot_id: string
+  total_points: number
+  total_tokens: number
+  total_requests: number
+  points: UsageDailyPoint[]
+}
+
+export interface UsageByBot {
+  bot_id: string
+  bot_name: string
+  points: number
+  tokens: number
+  requests: number
+}
+
 export interface WalletUsage {
   days: number
   start: string

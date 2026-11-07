@@ -21,16 +21,36 @@ const lightTheme = {
   },
 }
 
+const darkTheme = {
+  dark: true,
+  colors: {
+    background: '#1a1a1a',
+    surface: '#242424',
+    primary: '#5ba4d4',
+    'primary-darken-1': '#3a8ab8',
+    secondary: '#4a95c4',
+    'secondary-darken-1': '#3a8ab8',
+    info: '#03c9d7',
+    success: '#52c41a',
+    warning: '#faad14',
+    error: '#ff4d4f',
+    'surface-variant': '#2d2e30',
+    'on-surface-variant': '#e0e0e0',
+    'on-surface': '#e8eaed',
+    'on-background': '#e8eaed',
+  },
+}
+
 export const vuetify = createVuetify({
   components,
   directives,
   theme: {
     defaultTheme: 'light',
-    themes: { light: lightTheme },
+    themes: { light: lightTheme, dark: darkTheme },
   },
   defaults: {
     global: { ripple: true },
-    VBtn: { density: 'comfortable' },
+    VBtn: { rounded: 'lg', density: 'comfortable' },
     VCard: { rounded: 'lg', elevation: 0, border: true },
     VTextField: { variant: 'outlined', density: 'comfortable', color: 'primary', rounded: 'lg', hideDetails: 'auto' },
     VSelect: { variant: 'outlined', density: 'comfortable', color: 'primary', rounded: 'lg', hideDetails: 'auto' },
@@ -38,7 +58,7 @@ export const vuetify = createVuetify({
     VAutocomplete: { variant: 'outlined', density: 'comfortable', color: 'primary', rounded: 'lg', hideDetails: 'auto' },
     VChip: { size: 'small', rounded: 'md' },
     VDialog: { maxWidth: 560 },
-    VNavigationDrawer: { width: 232 },
+    VNavigationDrawer: { width: 245 },
     VTable: { density: 'comfortable' },
   },
   display: {

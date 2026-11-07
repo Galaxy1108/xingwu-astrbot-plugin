@@ -560,7 +560,7 @@ async function onDelete(): Promise<void> {
 .danger-zone {
   padding: 20px;
   border: 1px solid #f2c6c6;
-  background: #fffafa;
+  background: rgba(244, 67, 54, 0.07);
 }
 
 .danger-title {

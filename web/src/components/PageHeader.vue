@@ -42,7 +42,7 @@ withDefaults(
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .page-header__title-row {
@@ -53,9 +53,10 @@ withDefaults(
 
 .page-header__title {
   margin: 0;
-  font-size: 1.35rem;
-  font-weight: 650;
-  line-height: 1.35;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.2px;
 }
 
 .back-btn {
@@ -63,17 +64,28 @@ withDefaults(
 }
 
 .page-header__desc {
-  margin: 4px 0 0;
+  margin: 5px 0 0;
   color: var(--console-text-muted);
-  font-size: 0.875rem;
-  line-height: 1.5;
+  font-size: 13px;
+  line-height: 1.55;
 }
 
 .page-header__actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
+}
+
+.page-header__actions :deep(.v-btn) {
+  min-height: 40px;
+  font-size: 14px;
+  padding-inline: 16px;
+}
+
+.page-header__actions :deep(.v-btn--icon) {
+  min-width: 40px;
+  padding-inline: 0;
 }
 
 @media (max-width: 599px) {

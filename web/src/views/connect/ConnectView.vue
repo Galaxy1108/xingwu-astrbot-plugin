@@ -485,7 +485,7 @@ function cancelFlow(): void {
   border-radius: 50%;
   border: 1px solid var(--console-border);
   font-size: 0.72rem;
-  background: #fff;
+  background: var(--console-surface);
 }
 
 .step--active {
@@ -571,7 +571,7 @@ function cancelFlow(): void {
 }
 
 .aside-card--muted {
-  background: #fafbfc;
+  background: var(--console-surface-variant);
 }
 
 @media (min-width: 960px) {
@@ -608,7 +608,7 @@ function cancelFlow(): void {
   border: 1px solid var(--console-border);
   border-radius: var(--console-radius);
   cursor: pointer;
-  background: #fff;
+  background: var(--console-surface);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 

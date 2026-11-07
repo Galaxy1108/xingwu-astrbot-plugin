@@ -159,7 +159,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 10px;
   padding: 20px 12px;
-  background: #fafbfc;
+  background: var(--console-surface-variant);
   border: 1px dashed var(--console-border);
   border-radius: var(--console-radius);
   text-align: center;
@@ -173,7 +173,7 @@ onBeforeUnmount(() => {
   width: 240px;
   height: 240px;
   padding: 10px;
-  background: #fff;
+  background: var(--console-surface);
   border: 1px solid var(--console-border);
   border-radius: var(--console-radius);
 }

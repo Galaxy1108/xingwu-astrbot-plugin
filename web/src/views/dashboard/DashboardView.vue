@@ -12,7 +12,7 @@
         <v-btn variant="text" size="small" prepend-icon="mdi-refresh" :loading="loading" @click="reload">
           刷新
         </v-btn>
-        <v-btn color="primary" variant="flat" size="small" prepend-icon="mdi-qrcode-scan" to="/connect">
+        <v-btn color="primary" variant="tonal" size="small" prepend-icon="mdi-qrcode-scan" to="/connect">
           扫码接入
         </v-btn>
       </div>
@@ -48,21 +48,34 @@
         <v-card elevation="0" class="pa-5 h-100">
           <div class="chart-head">
             <div>
-              <div class="text-subtitle-1 font-weight-bold">额度变化</div>
-              <div class="text-caption muted">平台点数账本 · 最近 {{ usage?.days ?? 30 }} 天</div>
+              <div class="text-subtitle-1 font-weight-bold">点数消耗</div>
+              <div class="text-caption muted">按日统计 · 来自模型调用用量（非余额变化）</div>
             </div>
             <v-spacer />
-            <v-btn-toggle v-model="range" density="compact" variant="text" divided mandatory>
-              <v-btn value="30" size="small" @click="loadUsage(30)">30 天</v-btn>
-              <v-btn value="7" size="small" @click="loadUsage(7)">7 天</v-btn>
-            </v-btn-toggle>
+            <div class="chart-controls">
+              <v-select
+                v-model="botFilter"
+                :items="botOptions"
+                item-title="title"
+                item-value="value"
+                density="compact"
+                variant="outlined"
+                hide-details
+                class="bot-filter"
+                @update:model-value="loadDaily"
+              />
+              <v-btn-toggle v-model="range" density="compact" variant="text" divided mandatory>
+                <v-btn value="30" size="small" @click="loadDaily">30 天</v-btn>
+                <v-btn value="7" size="small" @click="loadDaily">7 天</v-btn>
+              </v-btn-toggle>
+            </div>
           </div>
-          <LoadingSkeleton v-if="usageLoading && !usage" variant="card" :rows="1" />
-          <UsageChart v-else :points="usage?.points ?? []" :height="210" />
+          <LoadingSkeleton v-if="dailyLoading && !daily" variant="card" :rows="1" />
+          <UsageChart v-else :points="daily?.points ?? []" value-label="消耗" unit="点" :height="210" />
           <div class="chart-foot text-caption muted">
-            <span>+{{ formatNumber(usage?.total_in ?? 0) }} 入账</span>
-            <span>-{{ formatNumber(usage?.total_out ?? 0) }} 扣减</span>
-            <span>当前余额 {{ formatNumber(wallet?.balance ?? 0) }} 点</span>
+            <span>近 {{ daily?.days ?? 30 }} 天消耗 <strong>{{ formatNumber(daily?.total_points ?? 0) }}</strong> 点</span>
+            <span>请求 {{ formatNumber(daily?.total_requests ?? 0) }} 次</span>
+            <span>剩余 {{ formatNumber(wallet?.balance ?? 0) }} 点</span>
           </div>
         </v-card>
       </v-col>
@@ -83,8 +96,8 @@
             <span class="font-weight-bold">{{ formatNumber(wallet?.balance ?? 0) }} 点</span>
           </div>
           <div class="quota-line">
-            <span class="muted">本月扣减</span>
-            <span>{{ formatNumber(usage?.total_out ?? 0) }} 点</span>
+            <span class="muted">近 30 天消耗</span>
+            <span>{{ formatNumber(daily?.total_points ?? 0) }} 点</span>
           </div>
           <div class="quota-line">
             <span class="muted">Bot 名额</span>
@@ -149,19 +162,26 @@ import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
 import UsageChart from '@/components/UsageChart.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useBotsStore } from '@/stores/bots'
-import { getWallet, getWalletLedger, getWalletUsage } from '@/api/wallet'
-import type { LedgerEntry, Wallet, WalletUsage } from '@/types'
+import { getDailyUsage, getUsageByBot, getWallet, getWalletLedger } from '@/api/wallet'
+import type { LedgerEntry, UsageByBot, UsageDaily, Wallet } from '@/types'
 import { formatDateTime, formatNumber } from '@/utils/format'
 
 const auth = useAuthStore()
 const bots = useBotsStore()
 
 const wallet = ref<Wallet | null>(null)
-const usage = ref<WalletUsage | null>(null)
+const daily = ref<UsageDaily | null>(null)
+const byBot = ref<UsageByBot[]>([])
 const recentLedger = ref<LedgerEntry[]>([])
-const usageLoading = ref(false)
+const dailyLoading = ref(false)
 const loading = ref(false)
 const range = ref<'30' | '7'>('30')
+const botFilter = ref('')
+
+const botOptions = computed(() => [
+  { title: '全部 Bot', value: '' },
+  ...byBot.value.map((item) => ({ title: item.bot_name || item.bot_id, value: item.bot_id })),
+])
 
 const quotaPercent = computed(() => {
   const max = auth.limits?.max_bots ?? 0
@@ -173,13 +193,13 @@ const stats = computed(() => [
   {
     label: '可用额度',
     value: `${formatNumber(wallet.value?.balance ?? 0)} 点`,
-    hint: `账本重算余额 ${formatNumber(wallet.value?.ledger_total ?? wallet.value?.balance ?? 0)}`,
+    hint: '剩余可用点数',
     icon: 'mdi-wallet-outline',
   },
   {
-    label: '本月扣减',
-    value: `${formatNumber(usage.value?.total_out ?? 0)} 点`,
-    hint: `入账 ${formatNumber(usage.value?.total_in ?? 0)} 点`,
+    label: '近 30 天消耗',
+    value: `${formatNumber(daily.value?.total_points ?? 0)} 点`,
+    hint: `请求 ${formatNumber(daily.value?.total_requests ?? 0)} 次`,
     icon: 'mdi-chart-line',
   },
   {
@@ -203,7 +223,7 @@ onMounted(() => {
 async function reload(): Promise<void> {
   loading.value = true
   try {
-    await Promise.all([bots.fetchBots(), loadWallet(), loadUsage(Number(range.value)), loadLedger()])
+    await Promise.all([bots.fetchBots(), loadWallet(), loadDaily(), loadByBot(), loadLedger()])
   } finally {
     loading.value = false
   }
@@ -217,14 +237,22 @@ async function loadWallet(): Promise<void> {
   }
 }
 
-async function loadUsage(days: number): Promise<void> {
-  usageLoading.value = true
+async function loadDaily(): Promise<void> {
+  dailyLoading.value = true
   try {
-    usage.value = await getWalletUsage(days)
+    daily.value = await getDailyUsage(Number(range.value), botFilter.value || undefined)
   } catch {
-    /* keep previous */
+    daily.value = null
   } finally {
-    usageLoading.value = false
+    dailyLoading.value = false
+  }
+}
+
+async function loadByBot(): Promise<void> {
+  try {
+    byBot.value = (await getUsageByBot(30)).items ?? []
+  } catch {
+    byBot.value = []
   }
 }
 
@@ -286,7 +314,7 @@ function signedNumber(value?: number): string {
 }
 
 .stat-card {
-  border: 1px solid rgba(0, 0, 0, 0.12);
+  border: 1px solid var(--console-border);
   transition: border-color 0.15s ease;
 }
 
@@ -316,6 +344,16 @@ function signedNumber(value?: number): string {
   align-items: flex-start;
   gap: 12px;
   margin-bottom: 4px;
+}
+
+.chart-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bot-filter {
+  width: 150px;
 }
 
 .chart-foot {

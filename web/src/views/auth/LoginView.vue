@@ -411,7 +411,7 @@ function safeRedirect(): string {
 .login-page {
   display: flex;
   min-height: 100dvh;
-  background: #fff;
+  background: var(--console-bg);
 }
 
 .login-aside {
@@ -546,6 +546,7 @@ function safeRedirect(): string {
   font-weight: 700;
   line-height: 1.3;
   margin: 0 0 6px;
+  color: var(--console-text);
 }
 
 .login-sub {
@@ -579,7 +580,7 @@ function safeRedirect(): string {
 .otp-cell {
   width: 100%;
   height: 56px;
-  border: 1px solid rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--console-border);
   border-radius: 12px;
   background: transparent;
   color: var(--console-text);

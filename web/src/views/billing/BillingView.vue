@@ -4,7 +4,7 @@
       <div>
         <h1 class="page-title">额度与账单</h1>
         <p class="page-sub">
-          预付费点数：管理员确认充值后入账，余额与流水以 append-only 账本为准。
+          预付费点数：管理员确认充值后入账，消费按模型用量扣减；余额与流水以 append-only 账本为准。
         </p>
       </div>
       <div class="page-actions">
@@ -20,24 +20,15 @@
     <v-row>
       <v-col cols="12" md="7">
         <v-card elevation="0" class="pa-6 h-100 balance-card">
-          <div class="text-caption muted mb-1">当前余额</div>
+          <div class="text-caption muted mb-1">剩余点数</div>
           <div class="d-flex align-baseline ga-2">
             <div class="balance-number">{{ formatNumber(wallet?.balance ?? 0) }}</div>
             <div class="text-body-2 muted">点</div>
           </div>
-          <div class="text-caption muted mt-1">
-            账本重算余额 {{ formatNumber(wallet?.ledger_total ?? wallet?.balance ?? 0) }} ·
-            近 30 天扣减 {{ formatNumber(usage?.total_out ?? 0) }} 点
+          <div class="text-caption muted mt-2">
+            近 30 天消耗 {{ formatNumber(daily?.total_points ?? 0) }} 点 · 请求
+            {{ formatNumber(daily?.total_requests ?? 0) }} 次
           </div>
-
-          <v-progress-linear :model-value="usagePercent" height="8" rounded color="primary" class="my-5" />
-
-          <v-row dense>
-            <v-col v-for="insight in insights" :key="insight.label" cols="4">
-              <div class="text-caption muted">{{ insight.label }}</div>
-              <div class="text-body-1 font-weight-bold">{{ insight.value }}</div>
-            </v-col>
-          </v-row>
         </v-card>
       </v-col>
 
@@ -64,17 +55,40 @@
     <v-card elevation="0" class="pa-5 mt-4">
       <div class="chart-head">
         <div>
-          <div class="text-subtitle-1 font-weight-bold">余额变化</div>
-          <div class="text-caption muted">平台点数账本 · 近 {{ usage?.days ?? 30 }} 天（不是上游模型账户余额）</div>
+          <div class="text-subtitle-1 font-weight-bold">点数消耗</div>
+          <div class="text-caption muted">按日统计 · 来自模型调用用量（非余额变化）</div>
         </div>
         <v-spacer />
-        <div class="chart-totals text-caption">
-          <span class="text-success">+{{ formatNumber(usage?.total_in ?? 0) }} 入账</span>
-          <span class="text-error">-{{ formatNumber(usage?.total_out ?? 0) }} 扣减</span>
+        <div class="chart-controls">
+          <v-select
+            v-model="botFilter"
+            :items="botOptions"
+            item-title="title"
+            item-value="value"
+            density="compact"
+            variant="outlined"
+            hide-details
+            class="bot-filter"
+            @update:model-value="loadDaily"
+          />
+          <v-btn-toggle v-model="range" density="compact" variant="text" divided mandatory>
+            <v-btn value="30" size="small" @click="loadDaily">30 天</v-btn>
+            <v-btn value="7" size="small" @click="loadDaily">7 天</v-btn>
+          </v-btn-toggle>
         </div>
       </div>
-      <LoadingSkeleton v-if="loading && !usage" variant="card" :rows="1" />
-      <UsageChart v-else :points="usage?.points ?? []" :height="210" />
+      <div class="chart-totals text-caption">
+        <span>近 {{ daily?.days ?? range }} 天消耗 <strong>{{ formatNumber(daily?.total_points ?? 0) }}</strong> 点</span>
+        <span class="muted">请求 {{ formatNumber(daily?.total_requests ?? 0) }} 次 · Tokens {{ formatNumber(daily?.total_tokens ?? 0) }}</span>
+      </div>
+      <LoadingSkeleton v-if="dailyLoading && !daily" variant="card" :rows="1" />
+      <UsageChart
+        v-else
+        :points="daily?.points ?? []"
+        value-label="消耗"
+        unit="点"
+        :height="230"
+      />
     </v-card>
 
     <v-card elevation="0" class="mt-4">
@@ -97,7 +111,7 @@
         v-else-if="items.length === 0"
         icon="mdi-wallet-outline"
         title="暂无流水"
-        description="管理员确认充值单或手动调整后，这里会出现明细。"
+        description="管理员确认充值单、手动调整或产生模型用量后，这里会出现明细。"
       />
 
       <template v-else>
@@ -151,36 +165,32 @@ import { useRoute, useRouter } from 'vue-router'
 import EmptyState from '@/components/EmptyState.vue'
 import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
 import UsageChart from '@/components/UsageChart.vue'
-import { getWallet, getWalletLedger, getWalletUsage } from '@/api/wallet'
-import { useAuthStore } from '@/stores/auth'
-import type { LedgerEntry, Wallet, WalletUsage } from '@/types'
+import { getDailyUsage, getUsageByBot, getWallet, getWalletLedger } from '@/api/wallet'
+import type { LedgerEntry, UsageByBot, UsageDaily, Wallet } from '@/types'
 import { formatDateTime, formatNumber } from '@/utils/format'
 
-const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 
 const wallet = ref<Wallet | null>(null)
-const usage = ref<WalletUsage | null>(null)
+const daily = ref<UsageDaily | null>(null)
+const byBot = ref<UsageByBot[]>([])
 const items = ref<LedgerEntry[]>([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
 const loading = ref(false)
+const dailyLoading = ref(false)
 const error = ref('')
+const range = ref<'30' | '7'>('30')
+const botFilter = ref('')
 
-const usagePercent = computed(() => {
-  const out = usage.value?.total_out ?? 0
-  const balance = wallet.value?.balance ?? 0
-  const totalPoints = out + balance
-  if (totalPoints <= 0) return 0
-  return Math.min(100, Math.round((out / totalPoints) * 100))
-})
-
-const insights = computed(() => [
-  { label: '累计充值', value: `${formatNumber(usage.value?.total_in ?? 0)} 点` },
-  { label: '近 30 天扣减', value: `${formatNumber(usage.value?.total_out ?? 0)} 点` },
-  { label: '可用额度', value: `${formatNumber(wallet.value?.balance ?? 0)} 点` },
+const botOptions = computed(() => [
+  { title: '全部 Bot', value: '' },
+  ...byBot.value.map((item) => ({
+    title: item.bot_name || item.bot_id,
+    value: item.bot_id,
+  })),
 ])
 
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / Math.max(1, pageSize.value))))
@@ -201,21 +211,40 @@ async function load(): Promise<void> {
   loading.value = true
   error.value = ''
   try {
-    const [walletResult, ledgerResult, usageResult] = await Promise.all([
+    const [walletResult, ledgerResult] = await Promise.all([
       getWallet(),
       getWalletLedger(page.value, pageSize.value),
-      getWalletUsage(30),
     ])
     wallet.value = walletResult
-    usage.value = usageResult
     items.value = ledgerResult.items ?? []
     total.value = ledgerResult.total ?? 0
     page.value = ledgerResult.page ?? page.value
     pageSize.value = ledgerResult.page_size ?? pageSize.value
+    await Promise.all([loadDaily(), loadByBot()])
   } catch (err) {
     error.value = (err as Error).message || '加载失败'
   } finally {
     loading.value = false
+  }
+}
+
+async function loadDaily(): Promise<void> {
+  dailyLoading.value = true
+  try {
+    daily.value = await getDailyUsage(Number(range.value), botFilter.value || undefined)
+  } catch {
+    daily.value = null
+  } finally {
+    dailyLoading.value = false
+  }
+}
+
+async function loadByBot(): Promise<void> {
+  try {
+    const result = await getUsageByBot(30)
+    byBot.value = result.items ?? []
+  } catch {
+    byBot.value = []
   }
 }
 
@@ -305,7 +334,7 @@ function chipColor(type?: string): string {
 }
 
 .balance-number {
-  font-size: 44px;
+  font-size: 46px;
   font-weight: 800;
   line-height: 1.1;
   letter-spacing: -1px;
@@ -337,10 +366,22 @@ function chipColor(type?: string): string {
   margin-bottom: 6px;
 }
 
+.chart-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bot-filter {
+  width: 160px;
+}
+
 .chart-totals {
   display: flex;
-  gap: 14px;
-  white-space: nowrap;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 4px 0 2px;
+  color: var(--console-text-muted);
 }
 
 .section-head {

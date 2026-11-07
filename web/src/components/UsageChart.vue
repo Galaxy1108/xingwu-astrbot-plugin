@@ -1,17 +1,23 @@
 <template>
-  <div class="usage-chart">
+  <div
+    ref="root"
+    class="usage-chart"
+    @mousemove="onMove"
+    @mouseleave="hoverIndex = -1"
+    @touchmove.passive="onTouch"
+  >
     <svg
       v-if="points.length"
       class="usage-chart__svg"
       :viewBox="`0 0 ${WIDTH} ${height}`"
       role="img"
-      :aria-label="`近 ${points.length} 天余额走势`"
+      :aria-label="`近 ${points.length} 天${valueLabel}`"
       preserveAspectRatio="none"
     >
       <defs>
         <linearGradient :id="gradientId" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" :stop-color="color" stop-opacity="0.28" />
-          <stop offset="100%" :stop-color="color" stop-opacity="0.02" />
+          <stop offset="0%" :stop-color="color" stop-opacity="0.26" />
+          <stop offset="100%" :stop-color="color" stop-opacity="0.01" />
         </linearGradient>
       </defs>
 
@@ -22,22 +28,33 @@
         </g>
       </g>
 
-      <path :d="areaPath" :fill="`url(#${gradientId})`" stroke="none" />
-      <path :d="linePath" fill="none" :stroke="color" stroke-width="2" stroke-linejoin="round" />
+      <path v-if="areaPath" :d="areaPath" :fill="`url(#${gradientId})`" stroke="none" />
+      <path v-if="linePath" :d="linePath" fill="none" :stroke="color" stroke-width="2" stroke-linejoin="round" />
 
-      <g v-if="points.length <= 31">
-        <circle
-          v-for="(point, index) in points"
-          :key="point.date"
-          :cx="x(index)"
-          :cy="y(point.balance)"
-          r="2.5"
-          :fill="color"
-          class="usage-chart__dot"
-        >
-          <title>{{ point.date }} · 余额 {{ point.balance }}（{{ sign(point.delta) }}）</title>
-        </circle>
-      </g>
+      <line
+        v-if="hoverIndex >= 0"
+        class="usage-chart__cursor"
+        :x1="x(hoverIndex)"
+        :x2="x(hoverIndex)"
+        :y1="pad.top"
+        :y2="height - pad.bottom"
+      />
+      <circle
+        v-if="hoverIndex >= 0"
+        :cx="x(hoverIndex)"
+        :cy="y(value(hoverIndex))"
+        r="4"
+        :fill="color"
+        stroke="var(--console-surface)"
+        stroke-width="2"
+      />
+      <circle
+        v-else-if="points.length"
+        :cx="x(points.length - 1)"
+        :cy="y(value(points.length - 1))"
+        r="3.5"
+        :fill="color"
+      />
 
       <g class="usage-chart__x">
         <text
@@ -51,55 +68,80 @@
         </text>
       </g>
     </svg>
-    <div v-else class="usage-chart__empty text-muted">暂无可用数据</div>
+
+    <div v-if="allZero" class="usage-chart__empty text-muted">
+      暂无{{ valueLabel }}记录
+    </div>
+
+    <div
+      v-if="hoverIndex >= 0 && points[hoverIndex]"
+      class="usage-chart__tooltip"
+      :style="tooltipStyle"
+    >
+      <div class="tooltip-date">{{ formatFullDate(points[hoverIndex].date) }}</div>
+      <div class="tooltip-row">
+        <span class="tooltip-dot" :style="{ background: color }" />
+        <span class="tooltip-label">{{ valueLabel }}</span>
+        <strong>{{ formatNumber(value(hoverIndex)) }} {{ unit }}</strong>
+      </div>
+      <div v-if="points[hoverIndex].tokens" class="tooltip-row tooltip-row--sub">
+        <span class="tooltip-label">Tokens</span>
+        <span>{{ formatNumber(points[hoverIndex].tokens) }}</span>
+      </div>
+      <div v-if="points[hoverIndex].requests" class="tooltip-row tooltip-row--sub">
+        <span class="tooltip-label">请求</span>
+        <span>{{ formatNumber(points[hoverIndex].requests) }} 次</span>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { UsagePoint } from '@/types'
+import { computed, ref } from 'vue'
+import type { UsageDailyPoint } from '@/types'
+import { formatNumber } from '@/utils/format'
 
 const props = withDefaults(
   defineProps<{
-    points: UsagePoint[]
+    points: UsageDailyPoint[]
     height?: number
     color?: string
+    valueLabel?: string
+    unit?: string
   }>(),
-  { height: 190, color: '#3c96ca' },
+  { height: 210, color: '#3c96ca', valueLabel: '消耗', unit: '点' },
 )
 
-const WIDTH = 640
-const pad = { top: 16, right: 16, bottom: 28, left: 48 }
+const WIDTH = 720
+const pad = { top: 18, right: 18, bottom: 28, left: 52 }
 const gradientId = `usage-grad-${Math.random().toString(36).slice(2, 8)}`
-const PAD = pad
+const root = ref<HTMLElement | null>(null)
+const hoverIndex = ref(-1)
 
-const values = computed(() => props.points.map((point) => point.balance))
-const bounds = computed(() => {
-  if (!values.value.length) return { min: 0, max: 1 }
-  let min = Math.min(...values.value)
-  let max = Math.max(...values.value)
-  if (min === max) {
-    min -= 1
-    max += 1
-  }
-  const span = max - min
-  return { min: min - span * 0.08, max: max + span * 0.08 }
+function value(index: number): number {
+  return Number(props.points[index]?.points ?? 0)
+}
+
+const maxValue = computed(() => {
+  const max = Math.max(0, ...props.points.map((point) => Number(point.points || 0)))
+  return max > 0 ? max * 1.15 : 1
 })
+
+const allZero = computed(() => props.points.every((point) => !Number(point.points || 0)))
 
 function x(index: number): number {
   const count = Math.max(1, props.points.length - 1)
   return pad.left + (index / count) * (WIDTH - pad.left - pad.right)
 }
 
-function y(value: number): number {
-  const { min, max } = bounds.value
+function y(v: number): number {
   const usable = props.height - pad.top - pad.bottom
-  return pad.top + ((max - value) / (max - min)) * usable
+  return pad.top + (1 - Math.min(1, v / maxValue.value)) * usable
 }
 
 const linePath = computed(() =>
   props.points
-    .map((point, index) => `${index === 0 ? 'M' : 'L'}${x(index).toFixed(1)},${y(point.balance).toFixed(1)}`)
+    .map((point, index) => `${index === 0 ? 'M' : 'L'}${x(index).toFixed(1)},${y(value(index)).toFixed(1)}`)
     .join(' '),
 )
 
@@ -109,28 +151,56 @@ const areaPath = computed(() => {
   return `${linePath.value} L${x(props.points.length - 1).toFixed(1)},${bottom} L${x(0).toFixed(1)},${bottom} Z`
 })
 
-const gridLines = computed(() => {
-  const { min, max } = bounds.value
-  return Array.from({ length: 4 }, (_, index) => {
-    const value = min + ((max - min) * index) / 3
+const gridLines = computed(() =>
+  Array.from({ length: 4 }, (_, index) => {
+    const ratio = index / 3
+    const v = maxValue.value * (1 - ratio)
     return {
-      value,
-      y: pad.top + ((props.height - pad.top - pad.bottom) * (3 - index)) / 3,
-      label: formatCompact(value),
+      value: v,
+      y: pad.top + (props.height - pad.top - pad.bottom) * ratio,
+      label: formatCompact(v),
     }
-  })
-})
+  }),
+)
 
 const xTicks = computed(() => {
   const points = props.points
   if (!points.length) return []
-  const indexes = points.length === 1 ? [0] : [0, Math.floor((points.length - 1) / 2), points.length - 1]
+  const indexes =
+    points.length <= 5
+      ? points.map((_, index) => index)
+      : [0, Math.floor((points.length - 1) / 3), Math.floor(((points.length - 1) * 2) / 3), points.length - 1]
   return [...new Set(indexes)].map((index, order, list) => ({
     index,
     label: points[index].date.slice(5),
     anchor: order === 0 ? 'start' : order === list.length - 1 ? 'end' : 'middle',
   }))
 })
+
+const tooltipStyle = computed(() => {
+  const index = hoverIndex.value
+  if (index < 0 || !props.points.length) return {}
+  const ratio = x(index) / WIDTH
+  const left = Math.min(0.82, Math.max(0.04, ratio))
+  return {
+    left: `${left * 100}%`,
+    transform: left > 0.6 ? 'translateX(-100%)' : 'translateX(0)',
+  }
+})
+
+function onMove(event: MouseEvent): void {
+  if (!props.points.length || !root.value) return
+  const rect = root.value.getBoundingClientRect()
+  const relative = ((event.clientX - rect.left) / rect.width) * WIDTH
+  const count = Math.max(1, props.points.length - 1)
+  const index = Math.round(((relative - pad.left) / (WIDTH - pad.left - pad.right)) * count)
+  hoverIndex.value = Math.max(0, Math.min(props.points.length - 1, index))
+}
+
+function onTouch(event: TouchEvent): void {
+  const touch = event.touches[0]
+  if (touch) onMove({ clientX: touch.clientX } as MouseEvent)
+}
 
 function formatCompact(value: number): string {
   const abs = Math.abs(value)
@@ -139,13 +209,15 @@ function formatCompact(value: number): string {
   return String(Math.round(value))
 }
 
-function sign(value: number): string {
-  return value > 0 ? `+${value}` : String(value)
+function formatFullDate(date: string): string {
+  const [year, month, day] = date.split('-')
+  return `${year}-${month}-${day}`
 }
 </script>
 
 <style scoped>
 .usage-chart {
+  position: relative;
   width: 100%;
 }
 
@@ -165,16 +237,70 @@ function sign(value: number): string {
 .usage-chart__grid text,
 .usage-chart__x text {
   fill: var(--console-text-muted);
-  font-size: 11px;
+  font-size: 11.5px;
 }
 
-.usage-chart__dot {
-  cursor: default;
+.usage-chart__cursor {
+  stroke: var(--console-text-muted);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  opacity: 0.6;
 }
 
 .usage-chart__empty {
-  padding: 32px 0;
-  text-align: center;
-  font-size: 0.85rem;
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.usage-chart__tooltip {
+  position: absolute;
+  top: 12px;
+  z-index: 2;
+  min-width: 178px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--console-surface);
+  border: 1px solid var(--console-border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.tooltip-date {
+  margin-bottom: 6px;
+  font-weight: 600;
+  color: var(--console-text);
+}
+
+.tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--console-text);
+}
+
+.tooltip-row--sub {
+  margin-top: 3px;
+  color: var(--console-text-muted);
+  font-size: 11.5px;
+}
+
+.tooltip-row strong {
+  margin-left: auto;
+  font-weight: 650;
+}
+
+.tooltip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.tooltip-label {
+  color: var(--console-text-muted);
 }
 </style>

@@ -9,6 +9,7 @@ import { vuetify } from './theme'
 import { setForbiddenHandler, setUnauthorizedHandler } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
+import { initTheme } from '@/composables/useThemeMode'
 
 const app = createApp(App)
 const pinia = createPinia()
@@ -35,4 +36,5 @@ setForbiddenHandler(() => {
 })
 
 app.use(router)
+initTheme()
 app.mount('#app')

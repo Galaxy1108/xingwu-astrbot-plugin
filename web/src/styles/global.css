@@ -16,6 +16,27 @@
   --console-gutter: 32px;
 }
 
+.v-theme--light {
+  --console-bg: #ffffff;
+  --console-surface: #ffffff;
+  --console-surface-variant: #f4f6f8;
+  --console-text: #1b1c1d;
+  --console-text-muted: rgba(0, 0, 0, 0.55);
+  --console-border: rgba(0, 0, 0, 0.09);
+  --console-primary-soft: #eaf4fa;
+}
+
+.v-theme--dark {
+  --console-bg: #1a1a1a;
+  --console-surface: #242424;
+  --console-surface-variant: #2d2e30;
+  --console-text: #e8eaed;
+  --console-text-muted: rgba(255, 255, 255, 0.56);
+  --console-border: rgba(255, 255, 255, 0.12);
+  --console-primary: #5ba4d4;
+  --console-primary-soft: rgba(91, 164, 212, 0.16);
+}
+
 html,
 body,
 #app {
@@ -73,7 +94,7 @@ body {
 }
 
 .muted {
-  color: rgba(0, 0, 0, 0.55);
+  color: var(--console-text-muted);
 }
 
 a {
@@ -173,11 +194,11 @@ a:hover {
 .v-application {
   font-family: inherit !important;
   background: var(--console-bg) !important;
+  color: var(--console-text);
 }
 
 .v-card {
-  border-color: rgba(0, 0, 0, 0.12) !important;
-  background: #fff;
+  border-color: var(--console-border) !important;
 }
 
 .v-table {
@@ -195,6 +216,25 @@ a:hover {
 }
 
 /* AstrBot 的描边按钮是浅灰细边，不是黑色硬边框 */
+/* AstrBot 的按钮更高更舒展：小号 36px / 常规 40px，14px 字号 */
+.v-btn--size-small {
+  min-height: 36px;
+  min-width: 64px;
+  padding-inline: 14px;
+  font-size: 13.5px;
+}
+
+.v-btn--size-small.v-btn--icon {
+  min-height: 32px;
+  min-width: 32px;
+  padding-inline: 0;
+}
+
+.v-btn--size-default {
+  min-height: 40px;
+  font-size: 14px;
+}
+
 .v-btn--variant-outlined {
   border-color: rgba(0, 0, 0, 0.16) !important;
 }

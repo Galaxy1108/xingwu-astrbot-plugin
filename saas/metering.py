@@ -216,6 +216,93 @@ class MeteringService:
         )
         return {"items": rows, "total": total, "page": page, "page_size": page_size}
 
+    def daily_usage(
+        self,
+        user_id: str,
+        *,
+        days: int = 30,
+        bot_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Daily consumption series (points/tokens/requests), zero-filled.
+
+        This is what the console charts use — consumption, not balance change.
+        """
+        from datetime import date, datetime, timedelta
+
+        days = max(1, min(90, int(days)))
+        now = self.clock.now()
+        end = date.fromtimestamp(now)
+        start = end - timedelta(days=days - 1)
+        start_ts = int(datetime(start.year, start.month, start.day).timestamp())
+        where = ["user_id = ?", "created_at >= ?"]
+        params: list[Any] = [user_id, start_ts]
+        if bot_id:
+            where.append("bot_id = ?")
+            params.append(bot_id)
+        rows = self.db.query(
+            "SELECT points, tokens_in, tokens_out, created_at FROM usage_records "
+            f"WHERE {' AND '.join(where)} ORDER BY id",
+            params,
+        )
+        buckets: dict[str, dict[str, int]] = {}
+        for offset in range(days):
+            key = (start + timedelta(days=offset)).isoformat()
+            buckets[key] = {"points": 0, "tokens": 0, "requests": 0}
+        total_points = total_tokens = total_requests = 0
+        for row in rows:
+            key = date.fromtimestamp(int(row["created_at"])).isoformat()
+            bucket = buckets.get(key)
+            if bucket is None:
+                continue
+            points = int(row["points"] or 0)
+            tokens = int(row["tokens_in"] or 0) + int(row["tokens_out"] or 0)
+            bucket["points"] += points
+            bucket["tokens"] += tokens
+            bucket["requests"] += 1
+            total_points += points
+            total_tokens += tokens
+            total_requests += 1
+        points = [
+            {"date": key, **buckets[key]} for key in sorted(buckets)
+        ]
+        return {
+            "days": days,
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+            "bot_id": bot_id or "",
+            "total_points": total_points,
+            "total_tokens": total_tokens,
+            "total_requests": total_requests,
+            "points": points,
+        }
+
+    def usage_by_bot(self, user_id: str, *, days: int = 30) -> dict[str, Any]:
+        days = max(1, min(366, int(days)))
+        since = self.clock.now() - days * 86400
+        rows = self.db.query(
+            "SELECT u.bot_id, COALESCE(b.name, '') AS bot_name, "
+            "COALESCE(SUM(u.points),0) AS points, "
+            "COALESCE(SUM(u.tokens_in + u.tokens_out),0) AS tokens, "
+            "COUNT(*) AS requests FROM usage_records u "
+            "LEFT JOIN bots b ON b.id = u.bot_id "
+            "WHERE u.user_id = ? AND u.created_at >= ? "
+            "GROUP BY u.bot_id ORDER BY points DESC",
+            (user_id, since),
+        )
+        return {
+            "days": days,
+            "items": [
+                {
+                    "bot_id": row["bot_id"],
+                    "bot_name": row["bot_name"] or row["bot_id"] or "未关联 Bot",
+                    "points": int(row["points"] or 0),
+                    "tokens": int(row["tokens"] or 0),
+                    "requests": int(row["requests"] or 0),
+                }
+                for row in rows
+            ],
+        }
+
     def usage_summary(self, user_id: str, *, days: int = 30) -> dict[str, Any]:
         days = max(1, min(366, int(days)))
         now = self.clock.now()

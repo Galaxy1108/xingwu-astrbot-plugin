@@ -177,6 +177,31 @@ async def list_models(request: web.Request) -> web.Response:
     return ok({"items": catalog_of(container).public_list()})
 
 
+@routes.get("/api/me/usage/daily")
+async def my_daily_usage(request: web.Request) -> web.Response:
+    user = current_user(request)
+    container = container_of(request)
+    try:
+        days = int(request.query.get("days", 30))
+    except (TypeError, ValueError):
+        raise ValidationError("days 必须是整数") from None
+    bot_id = (request.query.get("bot_id") or "").strip() or None
+    if bot_id:
+        container.bots.get_for_user(user["id"], bot_id)  # 404 on cross-tenant
+    return ok(metering_of(container).daily_usage(user["id"], days=days, bot_id=bot_id))
+
+
+@routes.get("/api/me/usage/by-bot")
+async def my_usage_by_bot(request: web.Request) -> web.Response:
+    user = current_user(request)
+    container = container_of(request)
+    try:
+        days = int(request.query.get("days", 30))
+    except (TypeError, ValueError):
+        raise ValidationError("days 必须是整数") from None
+    return ok(metering_of(container).usage_by_bot(user["id"], days=days))
+
+
 @routes.get("/api/me/usage")
 async def my_usage(request: web.Request) -> web.Response:
     user = current_user(request)

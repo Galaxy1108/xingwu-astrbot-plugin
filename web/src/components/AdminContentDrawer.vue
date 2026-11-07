@@ -978,7 +978,7 @@ watch(activeTab, (tab) => {
 .chat-bubble {
   border-radius: 12px;
   padding: 10px 14px;
-  background: #f4f6f8;
+  background: var(--console-surface-variant);
   color: var(--console-text);
   font-size: 14px;
   line-height: 1.7;
