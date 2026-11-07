@@ -136,6 +136,7 @@
 ```json
 {
   "id": "t_...", "name": "默认陪伴", "description": "…",
+  "base_conf_id": "default",
   "persona_prompt": "…", "begin_dialogs": ["…"],
   "config_patch": { "provider_settings": {} },
   "memory_defaults": { "auto": false, "max_items": 2000, "retention_days": 90, "recall_top_k": 5 },
@@ -269,6 +270,7 @@ Memory 对象：
 ## 4. 额度 / 访问记录（本期只读，M1 返回空数据）
 
 - `GET /api/wallet` → `{ "balance": 0, "currency": "points", "ledger_total": 0 }`
+- `GET /api/wallet/usage?days=14` → `{ days, start, end, balance, total_in, total_out, points: [{date, delta, in, out, balance}], scope: "platform_points_ledger" }`（余额走势图）
 - `GET /api/wallet/ledger?page=1` → `{ "items": [{id,delta,type,ref,note,created_at}], "total": 0, "page": 1, "page_size": 20 }`
 - `GET /api/access-log?page=1` → `{ "items": [], "total": 0, "page": 1, "page_size": 20 }`
 - `GET /api/me/encryption` → `{ "enabled": true, "state": "encrypted", "done": 0, "total": 0, "eta": null }`
@@ -283,7 +285,11 @@ Memory 对象：
 - `DELETE /api/admin/templates/{id}` → `200 { "deleted": true }`（软删：`enabled=false`）
 - 创建/更新字段同 Template；`enabled` 默认 true；`user_overridable` 白名单。
 
-校验：`name` 1–64，`config_patch`/`quota`/`memory_defaults`/`privacy_defaults` 必须是 JSON 对象；`begin_dialogs` 字符串数组。
+校验：`name` 1–64，`base_conf_id` 必须存在于 AstrBot 配置文件列表（默认 `default`），
+`config_patch`/`quota`/`memory_defaults`/`privacy_defaults` 必须是 JSON 对象；`begin_dialogs` 字符串数组。
+新 Bot 创建时会克隆该 AstrBot 配置文件（模型、温度、上下文等），`config_patch` 仅做增量覆盖。
+
+- `GET /api/admin/conf-profiles` → `{ "items": [ { "id", "name", "is_default" } ] }`（AstrBot 配置文件列表，模板编辑器用）
 
 ### 用户
 
@@ -298,6 +304,10 @@ Memory 对象：
 - `GET /api/admin/bots?page=&page_size=` → `{ "items": [ { …Bot, "owner_email": "…" } ], "total", "page", "page_size" }`
 - `POST /api/admin/bots/{id}/disable` → `{ "bot": Bot }`
 - `DELETE /api/admin/bots/{id}` `{ "confirm_name": "…" }` → `{ "deleted": true }`
+- `GET /api/admin/overview` → 平台账本统计：
+  `{ users, bots, ready_bots, balance_total, granted_points, adjusted_in_points, deducted_points, tokens_used, tokens_metered, paid_orders, paid_orders_amount_cny, balance_scope: "platform_points_ledger" }`
+  - `balance_total` 是**平台内预付费点数合计**，不是上游模型账户余额（上游余额不查询、不展示）。
+  - `tokens_metered=false` 表示尚未接入 token 用量计量（M4）。
 - `GET /api/admin/audit?page=&action=&actor_id=&target_id=` → `{ "items": [AuditLog], "total": 0, "page", "page_size" }`
 
 AuditLog：`{ "id": 1, "actor_id", "actor_role", "action", "target_type", "target_id", "reason", "detail", "ip", "created_at" }`

@@ -238,6 +238,131 @@ class BillingService:
             "balance": self.balance(user_id),
         }
 
+    def usage_series(self, user_id: str, *, days: int = 14) -> dict[str, Any]:
+        """Daily platform-ledger in/out + running balance (never upstream data)."""
+        from datetime import date, datetime, timedelta
+
+        days = max(1, min(90, int(days)))
+        now = self.clock.now()
+        end = date.fromtimestamp(now)
+        start = end - timedelta(days=days - 1)
+        start_ts = int(
+            datetime(start.year, start.month, start.day).timestamp()
+        )
+        rows = self.db.query(
+            "SELECT delta, type, created_at FROM ledger "
+            "WHERE user_id = ? AND created_at >= ? ORDER BY id",
+            (user_id, start_ts),
+        )
+        buckets: dict[str, dict[str, int]] = {}
+        for offset in range(days):
+            key = (start + timedelta(days=offset)).isoformat()
+            buckets[key] = {"delta": 0, "in": 0, "out": 0}
+        total_in = total_out = 0
+        for row in rows:
+            key = date.fromtimestamp(int(row["created_at"])).isoformat()
+            bucket = buckets.get(key)
+            if bucket is None:
+                continue
+            delta = int(row["delta"])
+            bucket["delta"] += delta
+            if delta > 0:
+                bucket["in"] += delta
+                total_in += delta
+            elif delta < 0:
+                bucket["out"] += -delta
+                total_out += -delta
+        balance = self.balance(user_id)
+        running = balance - sum(bucket["delta"] for bucket in buckets.values())
+        points = []
+        for key in sorted(buckets):
+            bucket = buckets[key]
+            running += bucket["delta"]
+            points.append(
+                {
+                    "date": key,
+                    "delta": bucket["delta"],
+                    "in": bucket["in"],
+                    "out": bucket["out"],
+                    "balance": running,
+                }
+            )
+        return {
+            "days": days,
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+            "balance": balance,
+            "total_in": total_in,
+            "total_out": total_out,
+            "points": points,
+            "scope": "platform_points_ledger",
+        }
+
+    # -- admin reporting ----------------------------------------------
+    def overview(self) -> dict[str, Any]:
+        """Platform-ledger statistics.
+
+        NOTE: "balance" is this platform's prepaid points ledger — it is *not*
+        the upstream model provider's account balance (that is not queryable
+        reliably and is deliberately not shown).
+        """
+        row = self.db.query_one(
+            "SELECT COALESCE(SUM(balance),0) AS total FROM wallets"
+        ) or {"total": 0}
+        ledger = self.db.query_one(
+            "SELECT "
+            "COALESCE(SUM(CASE WHEN delta > 0 AND type = 'grant' THEN delta ELSE 0 END),0) AS granted, "
+            "COALESCE(SUM(CASE WHEN delta > 0 AND type = 'adjust' THEN delta ELSE 0 END),0) AS adjusted_in, "
+            "COALESCE(SUM(CASE WHEN delta < 0 THEN -delta ELSE 0 END),0) AS deducted "
+            "FROM ledger"
+        ) or {}
+        tokens = self.db.query_one(
+            "SELECT COALESCE(SUM(used_tokens),0) AS tokens FROM quotas"
+        ) or {"tokens": 0}
+        users = self.db.query_one(
+            "SELECT COUNT(*) AS c FROM users WHERE status != 'deleted'"
+        ) or {"c": 0}
+        bots = self.db.query_one(
+            "SELECT COUNT(*) AS total, "
+            "COALESCE(SUM(CASE WHEN status = 'ready' THEN 1 ELSE 0 END),0) AS ready "
+            "FROM bots WHERE status != 'deleted'"
+        ) or {"total": 0, "ready": 0}
+        orders = self.db.query_one(
+            "SELECT COUNT(*) AS c, COALESCE(SUM(amount_cny),0) AS amount "
+            "FROM orders WHERE status = 'paid'"
+        ) or {"c": 0, "amount": 0}
+        return {
+            "users": int(users["c"]),
+            "bots": int(bots["total"]),
+            "ready_bots": int(bots["ready"]),
+            "balance_total": int(row["total"]),
+            "granted_points": int(ledger.get("granted", 0)),
+            "adjusted_in_points": int(ledger.get("adjusted_in", 0)),
+            "deducted_points": int(ledger.get("deducted", 0)),
+            "tokens_used": int(tokens["tokens"]),
+            "tokens_metered": int(tokens["tokens"]) > 0,
+            "paid_orders": int(orders["c"]),
+            "paid_orders_amount_cny": float(orders["amount"] or 0),
+            "balance_scope": "platform_points_ledger",
+        }
+
+    def user_stats(self, user_id: str) -> dict[str, Any]:
+        row = self.db.query_one(
+            "SELECT "
+            "(SELECT COALESCE(SUM(balance),0) FROM wallets WHERE user_id = ?) AS balance, "
+            "(SELECT COALESCE(SUM(delta),0) FROM ledger WHERE user_id = ? AND delta > 0 AND type = 'grant') AS granted, "
+            "(SELECT COALESCE(SUM(-delta),0) FROM ledger WHERE user_id = ? AND delta < 0) AS deducted, "
+            "(SELECT COALESCE(used_tokens,0) FROM quotas WHERE user_id = ?) AS tokens_used",
+            (user_id, user_id, user_id, user_id),
+        ) or {}
+        return {
+            "user_id": user_id,
+            "balance": int(row.get("balance") or 0),
+            "granted_points": int(row.get("granted") or 0),
+            "deducted_points": int(row.get("deducted") or 0),
+            "tokens_used": int(row.get("tokens_used") or 0),
+        }
+
     def reconcile(self, user_id: str) -> dict[str, Any]:
         """Repair the cached wallet balance from the append-only ledger."""
         expected = self.recompute_balance(user_id)

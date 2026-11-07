@@ -119,3 +119,65 @@ async def test_admin_quota_update_validation(admin_api: ApiHelper):
     )
     assert response.status == 400
     assert body["error"]["code"] == "validation_error"
+
+
+async def test_template_references_astrbot_conf_profile(container, invite, admin_api: ApiHelper):
+    # admin endpoint exposes demo AstrBot profiles in the fake adapter
+    response, body = await admin_api.get("/api/admin/conf-profiles")
+    assert response.status == 200
+    ids = {item["id"] for item in body["data"]["items"]}
+    assert "default" in ids and "conf_companion" in ids
+
+    response, body = await admin_api.post(
+        "/api/admin/templates",
+        json={"name": "配置文件模板", "base_conf_id": "conf_companion"},
+    )
+    assert response.status == 201
+    template = body["data"]["template"]
+    assert template["base_conf_id"] == "conf_companion"
+
+    # bot creation clones that AstrBot profile
+    code = container.auth.request_otp("conftpl@example.com", invite=invite)["dev_code"]
+    user = container.auth.verify_otp("conftpl@example.com", code, invite=invite)["user"]
+    bot = await container.bots.create(
+        user_id=user["id"],
+        name="配置模板 Bot",
+        template_id=template["id"],
+        platform="weixin_oc",
+    )
+    conf = container.port.state.configs.get(
+        container.db.query_one("SELECT conf_id FROM bots WHERE id = ?", (bot["id"],))["conf_id"]
+    )
+    assert conf["base_conf_id"] == "conf_companion"
+
+
+async def test_admin_overview_reports_ledger_totals(admin_api: ApiHelper, container):
+    user = container.auth.create_user("overviewtarget@example.com")
+    container.billing.adjust(admin_id="admin", user_id=user["id"], delta=500)
+    container.billing.adjust(admin_id="admin", user_id=user["id"], delta=-120)
+    response, body = await admin_api.get("/api/admin/overview")
+    assert response.status == 200
+    data = body["data"]
+    for field in (
+        "users",
+        "bots",
+        "ready_bots",
+        "balance_total",
+        "granted_points",
+        "deducted_points",
+        "tokens_used",
+        "tokens_metered",
+        "balance_scope",
+    ):
+        assert field in data
+    assert data["balance_scope"] == "platform_points_ledger"
+    assert data["adjusted_in_points"] >= 500
+    assert data["deducted_points"] >= 120
+
+
+async def test_wallet_usage_series(admin_api: ApiHelper, container):
+    response, body = await admin_api.get("/api/wallet/usage?days=7")
+    assert response.status == 200
+    assert body["data"]["days"] == 7
+    assert len(body["data"]["points"]) == 7
+    assert body["data"]["scope"] == "platform_points_ledger"

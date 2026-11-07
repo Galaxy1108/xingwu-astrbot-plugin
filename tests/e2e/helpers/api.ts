@@ -270,14 +270,21 @@ export async function uiLogin(page: Page, email: string, invite?: string): Promi
   await page.goto('/console/login')
   await expect(page.getByRole('heading', { name: '登录控制台' })).toBeVisible()
   if (invite) {
-    await page.getByRole('button', { name: /首次注册/ }).click()
-    await expect(page.getByLabel('邀请码（仅新用户需要）')).toBeVisible()
-    await page.getByLabel('邀请码（仅新用户需要）').fill(invite)
+    await page.getByRole('button', { name: /用邀请码注册/ }).click()
+    await expect(page.getByLabel('邀请码')).toBeVisible()
+    await page.getByLabel('邀请码').fill(invite)
   }
   await page.getByLabel('邮箱').fill(email)
   const code = await submitLoginRequest(page, email)
-  await page.getByLabel('6 位验证码').fill(code)
-  await page.getByTestId('login-verify').click()
+  const firstCell = page.getByLabel('验证码第 1 位')
+  await expect(firstCell).toBeVisible()
+  await firstCell.click()
+  await page.keyboard.type(code, { delay: 40 })
+  // 6 位输满会自动提交；若因焦点问题没触发，再点一次按钮兜底。
+  await page.waitForTimeout(400)
+  if (page.url().includes('/login')) {
+    await page.getByTestId('login-verify').click()
+  }
   await expect(page).toHaveURL(/\/console\/?$/, { timeout: 25_000 })
 }
 

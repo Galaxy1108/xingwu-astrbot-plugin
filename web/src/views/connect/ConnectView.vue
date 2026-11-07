@@ -27,7 +27,9 @@
       </div>
     </div>
 
-    <v-card v-if="step === 'form'" class="panel">
+    <div class="connect-layout">
+      <div class="connect-main">
+        <v-card v-if="step === 'form'" class="panel">
       <h2 class="section-title">1. 选择平台</h2>
       <div class="platform-grid" role="radiogroup" aria-label="平台">
         <div
@@ -113,16 +115,25 @@
       </p>
     </v-card>
 
-    <v-card v-else-if="step === 'qr'" class="panel">
-      <div class="qr-summary">
-        <div>
-          <h2 class="section-title">扫码接入</h2>
-          <p class="text-muted qr-summary-line">
-            {{ createdBot?.name || name }} · {{ platformShortLabel(platform) }} · {{ selectedTemplateName }}
-          </p>
-        </div>
-        <StatusChip v-if="qr" :status="qr.status" kind="qr" />
-      </div>
+        <v-card
+          v-else-if="step === 'qr'"
+          class="panel"
+          :class="{ 'panel--modal': isMobile }"
+        >
+          <div v-if="isMobile" class="qr-modal-head">
+            <span class="qr-modal-title">扫码接入</span>
+            <v-btn icon variant="text" aria-label="关闭扫码" @click="cancelFlow">
+              <v-icon>mdi-close</v-icon>
+            </v-btn>
+          </div>
+          <div class="qr-summary">
+            <div>
+              <h2 class="section-title qr-summary-title">扫码接入</h2>
+              <p class="text-muted qr-summary-line">
+                {{ createdBot?.name || name }} · {{ platformShortLabel(platform) }} · {{ selectedTemplateName }}
+              </p>
+            </div>
+          </div>
 
       <v-alert v-if="qrErrorText" type="error" variant="tonal" class="mb-4">
         <div class="alert-row">
@@ -178,27 +189,50 @@
       </div>
     </v-card>
 
-    <v-card v-else class="panel done-panel">
-      <v-icon size="64" color="success">mdi-check-decagram-outline</v-icon>
-      <h2 class="done-title">已接入</h2>
-      <p class="text-muted done-desc">
-        「{{ finishedBot?.name || createdBot?.name || name }}」已完成扫码，正在上线（通常 5 秒内生效）。
-      </p>
-      <div class="done-actions">
-        <v-btn color="primary" :to="finishedBot ? `/bots/${finishedBot.id}` : '/bots'">
-          查看 Bot 详情
-        </v-btn>
-        <v-btn variant="tonal" to="/bots">返回列表</v-btn>
+        <v-card v-else class="panel done-panel">
+          <v-icon size="64" color="success">mdi-check-decagram-outline</v-icon>
+          <h2 class="done-title">已接入</h2>
+          <p class="text-muted done-desc">
+            「{{ finishedBot?.name || createdBot?.name || name }}」已完成扫码，正在上线（通常 5 秒内生效）。
+          </p>
+          <div class="done-actions">
+            <v-btn color="primary" :to="finishedBot ? `/bots/${finishedBot.id}` : '/bots'">
+              查看 Bot 详情
+            </v-btn>
+            <v-btn variant="tonal" to="/bots">返回列表</v-btn>
+          </div>
+        </v-card>
       </div>
-    </v-card>
+
+      <aside v-if="!isMobile" class="connect-aside">
+        <v-card class="aside-card">
+          <h3 class="aside-title">接入后会得到</h3>
+          <ul class="aside-list">
+            <li><v-icon size="16" color="primary">mdi-account-details-outline</v-icon> 独立人格与模型配置快照</li>
+            <li><v-icon size="16" color="primary">mdi-database-lock-outline</v-icon> 每 Bot 一个 SQLCipher 加密记忆库</li>
+            <li><v-icon size="16" color="primary">mdi-qrcode-scan</v-icon> 扫码凭据加密保存，可随时重新扫码</li>
+          </ul>
+        </v-card>
+        <v-card class="aside-card">
+          <h3 class="aside-title">安全与隐私</h3>
+          <p class="aside-text">
+            记忆与凭据均加密存储，管理员访问会留痕。删除 Bot 时会同时清理记忆库、绑定与平台实例。
+          </p>
+        </v-card>
+        <v-card class="aside-card aside-card--muted">
+          <h3 class="aside-title">需要帮助？</h3>
+          <p class="aside-text">没有可用模板或邀请码，请联系平台管理员开通。</p>
+        </v-card>
+      </aside>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useDisplay } from 'vuetify'
 import PageHeader from '@/components/PageHeader.vue'
-import StatusChip from '@/components/StatusChip.vue'
 import QrPanel from '@/components/QrPanel.vue'
 import { usePolling } from '@/composables/usePolling'
 import { useBotsStore } from '@/stores/bots'
@@ -212,6 +246,7 @@ import { errorMessage, fieldError } from '@/utils/errors'
 import { platformShortLabel } from '@/utils/format'
 
 const router = useRouter()
+const { smAndDown: isMobile } = useDisplay()
 const bots = useBotsStore()
 const ui = useUiStore()
 
@@ -477,9 +512,86 @@ function cancelFlow(): void {
   background: var(--console-border);
 }
 
+.connect-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+.connect-main {
+  min-width: 0;
+}
+
 .panel {
   padding: 20px;
-  max-width: 720px;
+  max-width: none;
+}
+
+.connect-aside {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: sticky;
+  top: 80px;
+}
+
+.aside-card {
+  padding: 16px;
+}
+
+.aside-title {
+  margin: 0 0 8px;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.aside-text {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.7;
+  color: var(--console-text-muted);
+}
+
+.aside-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--console-text-muted);
+}
+
+.aside-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.aside-card--muted {
+  background: #fafbfc;
+}
+
+@media (min-width: 960px) {
+  .connect-layout {
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 20px;
+    align-items: start;
+  }
+}
+
+.qr-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: -4px 0 8px;
+}
+
+.qr-modal-title {
+  font-size: 0.95rem;
+  font-weight: 600;
 }
 
 .platform-grid {
@@ -622,6 +734,28 @@ function cancelFlow(): void {
 .alert-actions {
   display: flex;
   gap: 4px;
+}
+
+@media (max-width: 959px) {
+  .qr-summary-title {
+    display: none;
+  }
+
+  .panel--modal {
+    position: fixed;
+    inset: 0;
+    z-index: 2400;
+    margin: 0;
+    padding: 16px;
+    max-width: none;
+    border-radius: 0;
+    overflow-y: auto;
+    background: var(--console-surface);
+  }
+
+  .panel--modal .qr-footer {
+    padding-bottom: 16px;
+  }
 }
 
 @media (max-width: 599px) {

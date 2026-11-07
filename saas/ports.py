@@ -52,8 +52,13 @@ class AstrBotPort(Protocol):
         conf_name: str,
         persona_name: str,
         config_patch: dict[str, Any],
+        base_conf_id: str = "default",
     ) -> str:
-        """Create a config profile and return its ``conf_id``."""
+        """Create a config profile (cloned from ``base_conf_id``) and return its id."""
+        ...
+
+    async def list_conf_profiles(self) -> list[dict[str, Any]]:
+        """Available AstrBot configuration profiles: ``[{id,name,is_default}]``."""
         ...
 
     async def delete_config(self, conf_id: str) -> None: ...

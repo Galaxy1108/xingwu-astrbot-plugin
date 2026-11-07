@@ -8,6 +8,47 @@
       </template>
     </PageHeader>
 
+    <div class="page-grid page-grid--stats mb-4">
+      <StatCard
+        label="用户数"
+        :value="String(overview?.users ?? '—')"
+        :hint="`Bot ${overview?.bots ?? '—'} 个 · 在线 ${overview?.ready_bots ?? '—'} 个`"
+        icon="mdi-account-group-outline"
+        :loading="admin.overviewLoading"
+      />
+      <StatCard
+        label="平台点数余额合计"
+        :value="formatNumber(overview?.balance_total)"
+        hint="仅平台内预付费点数账本，不是上游模型账户余额"
+        icon="mdi-wallet-outline"
+        :loading="admin.overviewLoading"
+      />
+      <StatCard
+        label="累计充值点数"
+        :value="formatNumber(overview?.granted_points)"
+        :hint="`已确认订单 ${overview?.paid_orders ?? 0} 笔 · ¥${(overview?.paid_orders_amount_cny ?? 0).toFixed(2)}`"
+        icon="mdi-cash-plus"
+        color="success"
+        :loading="admin.overviewLoading"
+      />
+      <StatCard
+        label="累计扣减 / 消耗"
+        :value="formatNumber(overview?.deducted_points)"
+        hint="账本口径（手动扣减 + 后续计量消费）"
+        icon="mdi-cash-minus"
+        color="warning"
+        :loading="admin.overviewLoading"
+      />
+      <StatCard
+        label="已用 Token"
+        :value="overview?.tokens_metered ? formatNumber(overview.tokens_used) : '—'"
+        :hint="overview?.tokens_metered ? '来自 AstrBot 用量统计' : '尚未接入用量计量（M4）'"
+        icon="mdi-chart-timeline-variant"
+        color="info"
+        :loading="admin.overviewLoading"
+      />
+    </div>
+
     <v-card class="filter-card mb-4">
       <form class="filter-row" @submit.prevent="applyFilters">
         <v-text-field
@@ -50,30 +91,49 @@
 
     <v-card v-else-if="admin.users.length" class="table-card">
       <div class="table-scroll">
-        <v-table hover>
+        <v-table hover class="users-table">
           <thead>
             <tr>
               <th>邮箱</th>
-              <th>角色</th>
               <th>状态</th>
-              <th>Bot 数</th>
-              <th>配额</th>
-              <th>加密</th>
-              <th>创建时间</th>
-              <th class="text-right">操作</th>
+              <th class="nowrap">Bot / 配额</th>
+              <th class="nowrap">余额 / 充值 / 扣减</th>
+              <th class="nowrap">已用 Token</th>
+              <th class="nowrap">加密</th>
+              <th class="nowrap">创建时间</th>
+              <th class="text-right nowrap">操作</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="user in admin.users" :key="user.id">
               <td>
-                <div class="user-email">{{ user.email }}</div>
+                <div class="user-email">
+                  {{ user.email }}
+                  <v-chip
+                    v-if="user.role === 'admin'"
+                    size="x-small"
+                    variant="tonal"
+                    color="primary"
+                    class="ml-1 role-chip"
+                  >
+                    管理员
+                  </v-chip>
+                </div>
                 <div class="text-mono text-muted user-id">{{ user.id }}</div>
               </td>
-              <td>{{ user.role === 'admin' ? '管理员' : '用户' }}</td>
               <td><StatusChip :status="user.status" kind="user" /></td>
-              <td>{{ user.bot_count ?? '—' }}</td>
               <td class="nowrap quota-cell">
-                Bot {{ user.quota?.max_bots ?? '—' }} · Token {{ formatNumber(user.quota?.monthly_tokens) }}
+                {{ user.bot_count ?? '—' }} / {{ user.quota?.max_bots ?? '—' }}
+                <span class="text-muted quota-token">Token {{ formatNumber(user.quota?.monthly_tokens) }}</span>
+              </td>
+              <td class="nowrap points-cell">
+                <div>{{ formatNumber(user.balance) }} 点</div>
+                <div class="text-muted points-sub">
+                  +{{ formatNumber(user.granted_points) }} / -{{ formatNumber(user.deducted_points) }}
+                </div>
+              </td>
+              <td class="nowrap tokens-cell">
+                {{ user.used_tokens ? formatNumber(user.used_tokens) : '—' }}
               </td>
               <td>
                 <StatusChip :status="user.encryption?.state || 'encrypted'" kind="encryption" />
@@ -128,7 +188,7 @@
             <div><dt>余额</dt><dd>{{ formatNumber(quotaUser?.balance) }}</dd></div>
           </dl>
           <p class="text-muted quota-note">
-            M1 仅查看；配额修改接口已预留（PATCH /api/admin/users/{id}），后续版本开放编辑。
+            配额修改接口已支持（PATCH /api/admin/users/{id}）；本页暂只读展示。
           </p>
         </v-card-text>
         <v-card-actions>
@@ -160,6 +220,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusChip from '@/components/StatusChip.vue'
+import StatCard from '@/components/StatCard.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -174,6 +235,7 @@ const ui = useUiStore()
 const route = useRoute()
 const router = useRouter()
 
+const overview = computed(() => admin.overview)
 const search = ref('')
 const statusFilter = ref('')
 const currentPage = ref(1)
@@ -217,6 +279,7 @@ function syncFromQuery(): void {
 }
 
 async function load(): Promise<void> {
+  if (!admin.overview) void admin.loadOverview()
   try {
     await admin.loadUsers({
       page: currentPage.value,
@@ -316,6 +379,37 @@ async function confirmToggle(): Promise<void> {
 .user-id {
   font-size: 0.72rem;
   margin-top: 2px;
+}
+
+.points-cell {
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+
+.points-sub {
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.quota-token {
+  display: block;
+  font-size: 0.72rem;
+}
+
+.role-chip {
+  height: 18px;
+  font-size: 10px;
+}
+
+.users-table :deep(th) {
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--console-text-muted);
+}
+
+.tokens-cell {
+  font-size: 0.85rem;
 }
 
 .quota-cell {

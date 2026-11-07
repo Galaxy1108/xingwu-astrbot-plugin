@@ -7,9 +7,11 @@ import type {
   AdminOrderConfirmResult,
   AdminOrderCreatePayload,
   AdminOrderCreateResult,
+  AdminOverview,
   AdminUser,
   AdminUserPatch,
   AdminUserQuery,
+  ConfProfile,
   AuditLog,
   AuditQuery,
   Bot,
@@ -17,6 +19,14 @@ import type {
   Template,
   TemplateInput,
 } from '@/types'
+
+export function listConfProfiles(): Promise<{ items: ConfProfile[] }> {
+  return api.get<{ items: ConfProfile[] }>('/admin/conf-profiles')
+}
+
+export function getAdminOverview(): Promise<AdminOverview> {
+  return api.get<AdminOverview>('/admin/overview')
+}
 
 export function listAdminTemplates(): Promise<{ items: Template[] }> {
   return api.get<{ items: Template[] }>('/admin/templates')

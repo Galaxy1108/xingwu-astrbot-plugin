@@ -1,60 +1,28 @@
 <template>
-  <div>
-    <PageHeader
-      :title="greeting"
-      description="这里汇总你的 Bot、额度与最近动态。"
-    >
-      <template #actions>
-        <v-btn variant="tonal" prepend-icon="mdi-qrcode-scan" to="/connect">扫码接入</v-btn>
-        <v-btn color="primary" prepend-icon="mdi-plus" to="/bots">我的 Bot</v-btn>
-      </template>
-    </PageHeader>
-
-    <div class="page-grid page-grid--stats mb-6">
-      <StatCard
-        label="Bot 数量"
-        :value="botCountText"
-        :hint="limits ? `配额上限 ${limits.max_bots} 个` : '配额以服务端为准'"
-        icon="mdi-robot-outline"
-        :loading="bots.loading"
-      />
-      <StatCard
-        label="可用额度"
-        :value="walletText"
-        hint="本期为只读展示"
-        icon="mdi-wallet-outline"
-        :loading="walletLoading"
-      />
-      <StatCard
-        label="加密状态"
-        :value="encryptionText"
-        :hint="privacyHint"
-        icon="mdi-shield-lock-outline"
-        :color="encryptionEnabled ? 'success' : 'error'"
-        :loading="encryptionLoading"
-      />
-      <StatCard
-        label="运行中 Bot"
-        :value="bots.readyBots.length"
-        hint="状态以平台实例为准"
-        icon="mdi-play-circle-outline"
-        color="success"
-        :loading="bots.loading"
-      />
-    </div>
-
-    <v-alert v-if="bots.error" type="error" variant="tonal" class="mb-4">
-      <div class="alert-row">
-        <span>{{ bots.error.message }}</span>
-        <v-btn size="small" variant="text" color="error" @click="reload">重试</v-btn>
+  <div class="page-wrap">
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">总览</h1>
+        <p class="page-sub">
+          {{ auth.user?.email || '—' }} · {{ auth.isAdmin ? '管理员' : '普通用户' }} ·
+          {{ bots.items.length }} 个 Bot
+        </p>
       </div>
-    </v-alert>
+      <div class="page-actions">
+        <v-btn variant="outlined" size="small" prepend-icon="mdi-refresh" :loading="loading" @click="reload">
+          刷新
+        </v-btn>
+        <v-btn color="primary" variant="flat" size="small" prepend-icon="mdi-qrcode-scan" to="/connect">
+          扫码接入
+        </v-btn>
+      </div>
+    </div>
 
     <EmptyState
       v-if="!bots.loading && !bots.error && bots.items.length === 0"
       icon="mdi-robot-outline"
       title="还没有 Bot"
-      description="扫码接入一个微信或 QQ 机器人，几分钟内即可上线。也可以先到「我的 Bot」创建并稍后扫码。"
+      description="扫码接入一个微信或 QQ 机器人，几分钟内即可上线。"
       :actions="[
         { label: '扫码接入', to: '/connect' },
         { label: '我的 Bot', to: '/bots', variant: 'tonal' },
@@ -62,237 +30,344 @@
       class="mb-6"
     />
 
-    <v-row v-else class="dashboard-row">
-      <v-col cols="12" md="7">
-        <v-card class="panel">
-          <div class="panel-head">
-            <h2 class="section-title">最近活动</h2>
-            <v-btn size="small" variant="text" to="/access-log">访问记录</v-btn>
+    <v-row class="stats-row">
+      <v-col v-for="stat in stats" :key="stat.label" cols="6" md="3">
+        <v-card elevation="0" class="stat-card pa-4">
+          <div class="stat-label">
+            <v-icon size="18" class="mr-2">{{ stat.icon }}</v-icon>
+            <span class="text-caption muted">{{ stat.label }}</span>
           </div>
-          <LoadingSkeleton v-if="bots.loading" variant="list" :rows="3" />
-          <div v-else-if="recentBots.length === 0" class="panel-empty text-muted">
-            暂无活动，创建 Bot 后会在这里显示。
-          </div>
-          <v-list v-else density="comfortable" class="activity-list">
-            <v-list-item
-              v-for="bot in recentBots"
-              :key="bot.id"
-              :to="`/bots/${bot.id}`"
-              :title="bot.name"
-              :subtitle="`${platformShortLabel(bot.platform)} · ${bot.last_active_at ? formatRelative(bot.last_active_at) + '活跃' : '尚未活跃'}`"
-            >
-              <template #prepend>
-                <v-avatar color="primary" variant="tonal" size="34" rounded="lg">
-                  <v-icon size="18">mdi-robot-outline</v-icon>
-                </v-avatar>
-              </template>
-              <template #append>
-                <StatusChip :status="bot.status" />
-              </template>
-            </v-list-item>
-          </v-list>
-        </v-card>
-      </v-col>
-
-      <v-col cols="12" md="5">
-        <v-card class="panel">
-          <h2 class="section-title">快捷入口</h2>
-          <div class="quick-links">
-            <v-btn block variant="tonal" color="primary" prepend-icon="mdi-qrcode-scan" to="/connect">
-              扫码接入新 Bot
-            </v-btn>
-            <v-btn block variant="tonal" prepend-icon="mdi-shield-lock-outline" to="/settings/privacy">
-              查看加密状态
-            </v-btn>
-            <v-btn block variant="tonal" prepend-icon="mdi-wallet-outline" to="/billing">
-              查看额度
-            </v-btn>
-            <v-btn
-              v-if="auth.isAdmin"
-              block
-              variant="tonal"
-              color="secondary"
-              prepend-icon="mdi-shield-account-outline"
-              to="/admin"
-            >
-              进入管理后台
-            </v-btn>
-          </div>
-
-          <v-divider class="my-4" />
-          <h2 class="section-title">账号</h2>
-          <div class="account-line">
-            <span class="text-muted">邮箱</span>
-            <span class="account-value">{{ auth.user?.email }}</span>
-          </div>
-          <div class="account-line">
-            <span class="text-muted">角色</span>
-            <span class="account-value">{{ auth.isAdmin ? '管理员' : '普通用户' }}</span>
-          </div>
-          <div class="account-line">
-            <span class="text-muted">版本</span>
-            <span class="account-value">{{ auth.version || '—' }}</span>
-          </div>
+          <div class="stat-number">{{ stat.value }}</div>
+          <div class="stat-hint text-caption muted">{{ stat.hint }}</div>
         </v-card>
       </v-col>
     </v-row>
+
+    <v-row class="mt-1">
+      <v-col cols="12" md="8">
+        <v-card elevation="0" class="pa-5 h-100">
+          <div class="chart-head">
+            <div>
+              <div class="text-subtitle-1 font-weight-bold">额度变化</div>
+              <div class="text-caption muted">平台点数账本 · 最近 {{ usage?.days ?? 30 }} 天</div>
+            </div>
+            <v-spacer />
+            <v-btn-toggle v-model="range" density="compact" variant="text" divided mandatory>
+              <v-btn value="30" size="small" @click="loadUsage(30)">30 天</v-btn>
+              <v-btn value="7" size="small" @click="loadUsage(7)">7 天</v-btn>
+            </v-btn-toggle>
+          </div>
+          <LoadingSkeleton v-if="usageLoading && !usage" variant="card" :rows="1" />
+          <UsageChart v-else :points="usage?.points ?? []" :height="210" />
+          <div class="chart-foot text-caption muted">
+            <span>+{{ formatNumber(usage?.total_in ?? 0) }} 入账</span>
+            <span>-{{ formatNumber(usage?.total_out ?? 0) }} 扣减</span>
+            <span>当前余额 {{ formatNumber(wallet?.balance ?? 0) }} 点</span>
+          </div>
+        </v-card>
+      </v-col>
+
+      <v-col cols="12" md="4">
+        <v-card elevation="0" class="pa-5 h-100 quota-card">
+          <div class="text-subtitle-1 font-weight-bold mb-3">Bot 配额</div>
+          <div class="quota-ring">
+            <v-progress-circular :model-value="quotaPercent" :size="124" :width="10" color="primary">
+              <div class="text-center">
+                <div class="quota-percent">{{ quotaPercent }}%</div>
+                <div class="text-caption muted">已使用</div>
+              </div>
+            </v-progress-circular>
+          </div>
+          <div class="quota-line">
+            <span class="muted">当前余额</span>
+            <span class="font-weight-bold">{{ formatNumber(wallet?.balance ?? 0) }} 点</span>
+          </div>
+          <div class="quota-line">
+            <span class="muted">本月扣减</span>
+            <span>{{ formatNumber(usage?.total_out ?? 0) }} 点</span>
+          </div>
+          <div class="quota-line">
+            <span class="muted">Bot 名额</span>
+            <span>{{ bots.items.length }} / {{ auth.limits?.max_bots ?? '—' }}</span>
+          </div>
+          <v-spacer />
+          <v-btn block color="primary" variant="flat" prepend-icon="mdi-wallet-outline" to="/billing" class="mt-4">
+            查看额度与账单
+          </v-btn>
+        </v-card>
+      </v-col>
+    </v-row>
+
+    <v-card elevation="0" class="mt-4">
+      <div class="section-head">
+        <div class="text-subtitle-1 font-weight-bold">最近流水</div>
+        <v-spacer />
+        <v-btn variant="text" size="small" to="/billing" append-icon="mdi-arrow-right">查看全部</v-btn>
+      </div>
+      <v-table density="comfortable" class="recent-table">
+        <thead>
+          <tr>
+            <th>时间</th>
+            <th>类型</th>
+            <th>说明</th>
+            <th class="text-right">变动</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="entry in recentLedger" :key="String(entry.id)">
+            <td class="text-caption muted nowrap">{{ formatDateTime(entry.created_at) }}</td>
+            <td>
+              <v-chip size="x-small" variant="tonal" :color="entry.delta && entry.delta > 0 ? 'success' : 'default'">
+                {{ ledgerTypeLabel(entry.type) }}
+              </v-chip>
+            </td>
+            <td class="entry-note">{{ entry.note || '—' }}</td>
+            <td class="text-right font-weight-medium" :class="entry.delta && entry.delta > 0 ? 'text-success' : ''">
+              {{ signedNumber(entry.delta) }}
+            </td>
+          </tr>
+          <tr v-if="!recentLedger.length">
+            <td colspan="4" class="text-center muted pa-6">暂无流水</td>
+          </tr>
+        </tbody>
+      </v-table>
+    </v-card>
+
+    <v-alert v-if="bots.error" type="error" variant="tonal" class="mt-4">
+      <div class="alert-row">
+        <span>{{ bots.error.message }}</span>
+        <v-btn size="small" variant="text" color="error" @click="reload">重试</v-btn>
+      </div>
+    </v-alert>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import PageHeader from '@/components/PageHeader.vue'
-import StatCard from '@/components/StatCard.vue'
-import StatusChip from '@/components/StatusChip.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
+import UsageChart from '@/components/UsageChart.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useBotsStore } from '@/stores/bots'
-import { useEncryptionStore } from '@/stores/encryption'
-import { getWallet } from '@/api/wallet'
-import { toApiError } from '@/api/client'
-import type { Wallet } from '@/types'
-import { formatNumber, formatRelative, platformShortLabel } from '@/utils/format'
+import { getWallet, getWalletLedger, getWalletUsage } from '@/api/wallet'
+import type { LedgerEntry, Wallet, WalletUsage } from '@/types'
+import { formatDateTime, formatNumber } from '@/utils/format'
 
 const auth = useAuthStore()
 const bots = useBotsStore()
-const encryption = useEncryptionStore()
 
 const wallet = ref<Wallet | null>(null)
-const walletLoading = ref(false)
-const walletError = ref('')
-const encryptionLoading = ref(false)
-const encryptionEnabled = computed(() => encryption.enabled)
-const encryptionError = ref('')
+const usage = ref<WalletUsage | null>(null)
+const recentLedger = ref<LedgerEntry[]>([])
+const usageLoading = ref(false)
+const loading = ref(false)
+const range = ref<'30' | '7'>('30')
 
-const limits = computed(() => auth.limits)
-const greeting = computed(() => (auth.user?.email ? `欢迎回来，${auth.user.email}` : '总览'))
-
-const botCountText = computed(() => {
-  const used = bots.total
-  return limits.value ? `${used} / ${limits.value.max_bots}` : String(used)
+const quotaPercent = computed(() => {
+  const max = auth.limits?.max_bots ?? 0
+  if (!max) return 0
+  return Math.min(100, Math.round((bots.items.length / max) * 100))
 })
 
-const walletText = computed(() => {
-  if (walletLoading.value) return '…'
-  if (!wallet.value) return '—'
-  return `${formatNumber(wallet.value.balance)} ${wallet.value.currency === 'points' ? '积分' : wallet.value.currency}`
-})
-
-const encryptionText = computed(() => {
-  if (encryptionLoading.value) return '…'
-  if (encryption.error) return '加载失败'
-  return encryptionEnabled.value ? '已开启' : '明文存储'
-})
-
-const privacyHint = computed(() => {
-  if (encryption.error) return '可到隐私页重试'
-  return encryptionEnabled.value ? '对话与记忆均加密存储' : '当前为明文存储'
-})
-
-const recentBots = computed(() =>
-  [...bots.items]
-    .sort((a, b) => (b.last_active_at || b.updated_at) - (a.last_active_at || a.updated_at))
-    .slice(0, 5),
-)
+const stats = computed(() => [
+  {
+    label: '可用额度',
+    value: `${formatNumber(wallet.value?.balance ?? 0)} 点`,
+    hint: `账本重算余额 ${formatNumber(wallet.value?.ledger_total ?? wallet.value?.balance ?? 0)}`,
+    icon: 'mdi-wallet-outline',
+  },
+  {
+    label: '本月扣减',
+    value: `${formatNumber(usage.value?.total_out ?? 0)} 点`,
+    hint: `入账 ${formatNumber(usage.value?.total_in ?? 0)} 点`,
+    icon: 'mdi-chart-line',
+  },
+  {
+    label: 'Bot 数量',
+    value: String(bots.items.length),
+    hint: `配额上限 ${auth.limits?.max_bots ?? '—'} 个`,
+    icon: 'mdi-robot-outline',
+  },
+  {
+    label: '运行中',
+    value: String(bots.readyBots.length),
+    hint: `共 ${bots.items.length} 个 Bot`,
+    icon: 'mdi-play-circle-outline',
+  },
+])
 
 onMounted(() => {
-  void Promise.allSettled([reloadBots(), loadWallet(), loadEncryption()])
+  void reload()
 })
 
-async function reloadBots(): Promise<void> {
+async function reload(): Promise<void> {
+  loading.value = true
   try {
-    await bots.fetchBots(true)
-  } catch {
-    /* 错误已在 store 中记录 */
+    await Promise.all([bots.fetchBots(), loadWallet(), loadUsage(Number(range.value)), loadLedger()])
+  } finally {
+    loading.value = false
   }
 }
 
 async function loadWallet(): Promise<void> {
-  walletLoading.value = true
-  walletError.value = ''
   try {
     wallet.value = await getWallet()
-  } catch (error) {
-    walletError.value = toApiError(error).message
-  } finally {
-    walletLoading.value = false
+  } catch {
+    /* 由页面空白提示兜底 */
   }
 }
 
-async function loadEncryption(): Promise<void> {
-  encryptionLoading.value = true
-  encryptionError.value = ''
+async function loadUsage(days: number): Promise<void> {
+  usageLoading.value = true
   try {
-    await encryption.fetchStatus()
-  } catch (error) {
-    encryptionError.value = toApiError(error).message
+    usage.value = await getWalletUsage(days)
+  } catch {
+    /* keep previous */
   } finally {
-    encryptionLoading.value = false
+    usageLoading.value = false
   }
 }
 
-async function reload(): Promise<void> {
-  await Promise.allSettled([reloadBots(), loadWallet(), loadEncryption()])
+async function loadLedger(): Promise<void> {
+  try {
+    const result = await getWalletLedger(1, 5)
+    recentLedger.value = result.items ?? []
+  } catch {
+    recentLedger.value = []
+  }
+}
+
+function ledgerTypeLabel(type?: string): string {
+  switch (type) {
+    case 'grant':
+      return '充值'
+    case 'adjust':
+      return '调整'
+    case 'consume':
+      return '消耗'
+    default:
+      return type || '变动'
+  }
+}
+
+function signedNumber(value?: number): string {
+  const delta = Number(value ?? 0)
+  return delta > 0 ? `+${formatNumber(delta)}` : formatNumber(delta)
 }
 </script>
 
 <style scoped>
-.alert-row {
+.page-wrap {
+  width: 100%;
+}
+
+.page-head {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  align-items: flex-start;
   gap: 12px;
   flex-wrap: wrap;
+  margin-bottom: 24px;
 }
 
-.dashboard-row {
-  margin-top: -12px;
+.page-sub {
+  margin: 0;
+  font-size: 13px;
+  color: var(--console-text-muted);
 }
 
-.panel {
-  padding: 20px;
-  height: 100%;
+.page-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
 }
 
-.panel-head {
+.stats-row {
+  margin-bottom: 4px;
+}
+
+.stat-card {
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  transition: border-color 0.15s ease;
+}
+
+.stat-card:hover {
+  border-color: rgba(60, 150, 202, 0.45);
+}
+
+.stat-label {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  margin-bottom: 8px;
+  color: var(--console-text-muted);
 }
 
-.panel-empty {
-  padding: 16px 0;
-  font-size: 0.85rem;
+.stat-number {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.25;
 }
 
-.activity-list {
-  margin: 0 -8px;
+.stat-hint {
+  margin-top: 2px;
 }
 
-.quick-links {
+.chart-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.chart-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 6px;
+}
+
+.quota-card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
 }
 
-.account-line {
+.quota-ring {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0 14px;
+}
+
+.quota-percent {
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+.quota-line {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
-  padding: 6px 0;
-  font-size: 0.83rem;
+  font-size: 13px;
+  padding: 2px 0;
 }
 
-.account-value {
+.section-head {
+  display: flex;
+  align-items: center;
+  padding: 18px 20px 4px;
+}
+
+.recent-table {
+  background: transparent;
+}
+
+.recent-table :deep(th) {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--console-text-muted);
+}
+
+.entry-note {
+  max-width: 420px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.wallet-error {
-  font-size: 0.78rem;
-  color: #c62828;
-  margin-top: 4px;
 }
 </style>

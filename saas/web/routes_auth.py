@@ -145,6 +145,18 @@ async def wallet_ledger(request: web.Request) -> web.Response:
     return ok(container.billing.ledger(user["id"], page=page, page_size=page_size))
 
 
+@routes.get("/api/wallet/usage")
+async def wallet_usage(request: web.Request) -> web.Response:
+    """Daily ledger in/out + running balance for the usage chart."""
+    container = container_of(request)
+    user = current_user(request)
+    try:
+        days = int(request.query.get("days", 14))
+    except (TypeError, ValueError):
+        raise ValidationError("days 必须是整数") from None
+    return ok(container.billing.usage_series(user["id"], days=days))
+
+
 @routes.get("/api/access-log")
 async def access_log(request: web.Request) -> web.Response:
     container = container_of(request)

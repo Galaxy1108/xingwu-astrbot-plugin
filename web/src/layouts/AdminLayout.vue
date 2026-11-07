@@ -3,9 +3,9 @@
     v-model="drawerOpen"
     :permanent="!isMobile"
     :temporary="isMobile"
-    :width="232"
+    :width="245"
     class="admin-drawer"
-    elevation="1"
+    elevation="0"
   >
     <div class="brand-row">
       <v-icon color="primary" size="26">mdi-shield-account-outline</v-icon>
@@ -143,6 +143,13 @@ async function onLogout(): Promise<void> {
   font-size: 1rem;
   font-weight: 600;
   letter-spacing: 0;
+}
+
+/* AstrBot 风格：桌面端页面自带标题，顶栏不再重复显示 */
+@media (min-width: 960px) {
+  .topbar-title {
+    visibility: hidden;
+  }
 }
 
 .admin-main {

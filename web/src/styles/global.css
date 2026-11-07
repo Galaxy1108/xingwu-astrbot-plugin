@@ -1,16 +1,19 @@
 :root {
+  --font-sans: 'Outfit', 'Noto Sans SC', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, 'Roboto Mono', monospace;
   --console-primary: #3c96ca;
   --console-primary-dark: #2f7ba6;
   --console-primary-soft: #eaf4fa;
-  --console-bg: #f5f7fa;
+  --console-bg: #ffffff;
   --console-surface: #ffffff;
   --console-text: #1b1c1d;
   --console-text-muted: #5f6368;
-  --console-border: #dfe3e8;
+  --console-border: #d0d0d0;
   --console-radius: 8px;
   --console-topbar: 56px;
-  --console-sidebar: 232px;
-  --console-gutter: 24px;
+  --console-sidebar: 245px;
+  --console-gutter: 32px;
 }
 
 html,
@@ -21,16 +24,7 @@ body,
 }
 
 body {
-  font-family:
-    system-ui,
-    -apple-system,
-    'Segoe UI',
-    Roboto,
-    'Helvetica Neue',
-    'PingFang SC',
-    'Hiragino Sans GB',
-    'Microsoft YaHei',
-    sans-serif;
+  font-family: var(--font-sans);
   color: var(--console-text);
   background: var(--console-bg);
   -webkit-font-smoothing: antialiased;
@@ -42,6 +36,46 @@ body {
   flex-direction: column;
 }
 
+/* AstrBot 仪表盘同款细滚动条 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(120, 120, 120, 0.32);
+  border-radius: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* AstrBot 把 Vuetify 标题覆盖成紧凑排版，这里沿用同一套尺寸 */
+.text-h1 { font-size: 2.125rem !important; font-weight: 700 !important; line-height: 3.5rem !important; letter-spacing: 0 !important; }
+.text-h2 { font-size: 1.5rem !important; font-weight: 700 !important; line-height: 2.5rem !important; letter-spacing: 0 !important; }
+.text-h3 { font-size: 1.25rem !important; font-weight: 600 !important; line-height: 2rem !important; letter-spacing: 0 !important; }
+.text-h4 { font-size: 1rem !important; font-weight: 600 !important; line-height: 1.5rem !important; letter-spacing: 0 !important; }
+.text-h5 { font-size: 0.875rem !important; font-weight: 500 !important; line-height: 1.2rem !important; letter-spacing: 0 !important; }
+.text-h6 { font-size: 0.75rem !important; font-weight: 500 !important; letter-spacing: 0 !important; }
+.text-subtitle-1 { font-size: 0.875rem !important; font-weight: 500 !important; line-height: 1.35rem !important; }
+.text-subtitle-2 { font-size: 0.75rem !important; line-height: 1.1rem !important; }
+.text-body-1 { font-size: 0.875rem !important; }
+.text-body-2 { font-size: 0.8125rem !important; }
+.text-caption { font-size: 0.75rem !important; }
+.text-button { letter-spacing: 0 !important; text-transform: none !important; }
+
+/* 页面标题（AstrBot 风格：26px / 700 / 紧凑） */
+.page-title {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.2px;
+  margin: 0 0 4px;
+}
+
+.muted {
+  color: rgba(0, 0, 0, 0.55);
+}
+
 a {
   color: var(--console-primary);
   text-decoration: none;
@@ -51,11 +85,23 @@ a:hover {
   text-decoration: underline;
 }
 
+/* Navigation / buttons are anchors too — never underline them on hover. */
+.v-list-item:hover,
+.v-list-item:focus,
+.v-list-item--active:hover,
+.v-btn:hover,
+.v-btn:focus,
+.v-tab:hover,
+.v-breadcrumbs-item:hover,
+.v-pagination .v-btn:hover {
+  text-decoration: none !important;
+}
+
 .page-container {
   width: 100%;
-  max-width: 1280px;
+  max-width: 1180px;
   margin: 0 auto;
-  padding: 24px;
+  padding: 28px 32px 56px;
   box-sizing: border-box;
 }
 
@@ -74,7 +120,7 @@ a:hover {
 }
 
 .text-mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.85em;
 }
 
@@ -130,7 +176,12 @@ a:hover {
 }
 
 .v-card {
-  border-color: var(--console-border) !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+  background: #fff;
+}
+
+.v-table {
+  background: transparent !important;
 }
 
 .v-table {
@@ -140,4 +191,14 @@ a:hover {
 .v-btn {
   text-transform: none !important;
   letter-spacing: 0 !important;
+}
+
+/*
+ * Vuetify animates the outlined field label from the input line up to the
+ * border. On slower/zoomed browsers that 150ms morph makes the label overlap
+ * the typed value (and takes a screenshot-visible moment). MUI-style instant
+ * label placement is clearer for this console: zero duration = snap.
+ */
+.v-label.v-field-label {
+  transition-duration: 0s !important;
 }

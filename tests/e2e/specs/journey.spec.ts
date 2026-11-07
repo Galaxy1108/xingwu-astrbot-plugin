@@ -54,7 +54,7 @@ test('完整用户旅程：登录 → 建 Bot → 扫码上线 → 改名 → �
     await expect(page).toHaveURL(/\/console\/bots\/b_[0-9a-f]+\?qr=1/, { timeout: 25_000 })
     botId = botIdFromUrl(page.url())
     await expect(page.getByRole('heading', { name: botName })).toBeVisible()
-    await expect(page.getByAltText('扫码登录二维码')).toBeVisible({ timeout: 25_000 })
+    await expect(page.getByRole('img', { name: '扫码登录二维码' })).toBeVisible({ timeout: 25_000 })
     await expect(page.getByText('等待扫码', { exact: true })).toBeVisible()
     await shot(page, '02-bot-detail-qr')
 

@@ -108,6 +108,19 @@ class AstrBotAdapter:
         except ValueError:
             logger.warning("删除人格时未找到：%s", persona_name)
 
+    async def list_conf_profiles(self) -> list[dict[str, Any]]:
+        acm = self.context.astrbot_config_mgr
+        profiles = []
+        for item in acm.get_conf_list():
+            profiles.append(
+                {
+                    "id": getattr(item, "id", None) or (item.get("id") if isinstance(item, dict) else ""),
+                    "name": getattr(item, "name", None) or (item.get("name") if isinstance(item, dict) else ""),
+                    "is_default": str(getattr(item, "id", "")) == "default",
+                }
+            )
+        return profiles
+
     async def create_config(
         self,
         *,
@@ -115,9 +128,15 @@ class AstrBotAdapter:
         conf_name: str,
         persona_name: str,
         config_patch: dict[str, Any],
+        base_conf_id: str = "default",
     ) -> str:
         acm = self.context.astrbot_config_mgr
-        base = acm.confs.get("default")
+        base = acm.confs.get(base_conf_id)
+        if base is None and base_conf_id != "default":
+            # The profile was deleted after the template was saved.
+            raise ValueError(f"配置文件不存在：{base_conf_id}")
+        if base is None:
+            base = acm.confs.get("default")
         if base is None:
             base = {}
         new_config = _deep_merge(dict(base), config_patch or {})

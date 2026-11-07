@@ -220,6 +220,7 @@ class BotService:
                 conf_name=conf_name,
                 persona_name=persona_name,
                 config_patch=dict(snapshot.get("config_patch") or {}),
+                base_conf_id=str(snapshot.get("base_conf_id") or "default"),
             )
             created["conf_id"] = conf_id
 

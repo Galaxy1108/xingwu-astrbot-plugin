@@ -11,8 +11,10 @@ import type {
   AdminOrderCreatePayload,
   AdminOrderCreateResult,
   AdminUser,
+  AdminOverview,
   AdminUserQuery,
   AuditLog,
+  ConfProfile,
   AuditQuery,
   PageResult,
   Template,
@@ -23,6 +25,10 @@ export const useAdminStore = defineStore('admin', () => {
   const templates = ref<Template[]>([])
   const templatesLoading = ref(false)
   const templatesError = ref<ApiError | null>(null)
+  const confProfiles = ref<ConfProfile[]>([])
+  const overview = ref<AdminOverview | null>(null)
+  const overviewLoading = ref(false)
+  const overviewError = ref<ApiError | null>(null)
 
   const users = ref<AdminUser[]>([])
   const usersTotal = ref(0)
@@ -48,6 +54,31 @@ export const useAdminStore = defineStore('admin', () => {
   const auditPageSize = ref(20)
   const auditLoading = ref(false)
   const auditError = ref<ApiError | null>(null)
+
+  async function loadConfProfiles(): Promise<ConfProfile[]> {
+    try {
+      const result = await adminApi.listConfProfiles()
+      confProfiles.value = result.items ?? []
+      return confProfiles.value
+    } catch {
+      confProfiles.value = [{ id: 'default', name: '默认配置', is_default: true }]
+      return confProfiles.value
+    }
+  }
+
+  async function loadOverview(): Promise<AdminOverview | null> {
+    overviewLoading.value = true
+    overviewError.value = null
+    try {
+      overview.value = await adminApi.getAdminOverview()
+      return overview.value
+    } catch (err) {
+      overviewError.value = toApiError(err)
+      return null
+    } finally {
+      overviewLoading.value = false
+    }
+  }
 
   async function loadTemplates(): Promise<Template[]> {
     templatesLoading.value = true
@@ -188,6 +219,12 @@ export const useAdminStore = defineStore('admin', () => {
     templates,
     templatesLoading,
     templatesError,
+    confProfiles,
+    overview,
+    overviewLoading,
+    overviewError,
+    loadConfProfiles,
+    loadOverview,
     users,
     usersTotal,
     usersPage,

@@ -124,3 +124,22 @@ async def test_billing_forbidden_for_users(user_api: ApiHelper, container):
         "/api/admin/ledger", json={"user_id": user["id"], "delta": 1}
     )
     assert response.status == 403
+
+
+def test_usage_series(container, clock):
+    user = _user(container, "usage@example.com")
+    container.billing.adjust(
+        admin_id="admin", user_id=user["id"], delta=1000, reason="初始"
+    )
+    clock.tick(3600)
+    container.billing.adjust(
+        admin_id="admin", user_id=user["id"], delta=-200, reason="扣减"
+    )
+    series = container.billing.usage_series(user["id"], days=7)
+    assert series["days"] == 7
+    assert len(series["points"]) == 7
+    assert series["balance"] == 800
+    assert series["total_in"] == 1000
+    assert series["total_out"] == 200
+    assert series["points"][-1]["balance"] == 800
+    assert all("date" in point and "balance" in point for point in series["points"])

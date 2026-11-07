@@ -33,6 +33,7 @@
             <tr>
               <th>名称</th>
               <th>描述</th>
+              <th>基础配置</th>
               <th>状态</th>
               <th>配额</th>
               <th>更新时间</th>
@@ -46,6 +47,9 @@
                 <div class="text-mono text-muted template-id">{{ template.id }}</div>
               </td>
               <td class="desc-cell">{{ template.description || '—' }}</td>
+              <td class="nowrap conf-cell" :title="template.base_conf_id || 'default'">
+                {{ profileName(template.base_conf_id) }}
+              </td>
               <td>
                 <v-chip
                   :color="template.enabled ? 'success' : 'default'"
@@ -122,7 +126,22 @@
           />
 
           <v-divider class="my-5" />
-          <h3 class="json-title">JSON 配置</h3>
+          <h3 class="json-title">AstrBot 配置</h3>
+          <v-select
+            v-model="form.base_conf_id"
+            :items="profileOptions"
+            item-title="name"
+            item-value="id"
+            label="基础配置文件"
+            hint="创建 Bot 时从该 AstrBot 配置文件克隆；模型、温度、上下文等沿用配置文件设置"
+            persistent-hint
+            class="mt-3"
+          />
+          <p class="text-muted conf-note">
+            配置文件在 AstrBot「配置管理」中维护；本模板只保存引用，下面 JSON 仅作为增量覆盖。
+          </p>
+
+          <h3 class="json-title mt-5">JSON 增量覆盖</h3>
 
           <v-textarea
             v-model="form.config_patch"
@@ -213,6 +232,7 @@ const deleting = ref(false)
 
 const emptyForm = () => ({
   name: '',
+  base_conf_id: 'default',
   description: '',
   persona_prompt: '',
   begin_dialogs: '',
@@ -230,7 +250,25 @@ const emptyForm = () => ({
 
 const form = reactive(emptyForm())
 
+const profileOptions = computed(() => {
+  const items = admin.confProfiles ?? []
+  const options = items.map((item) => ({
+    id: item.id,
+    name: item.is_default ? `${item.name}（默认）` : item.name,
+  }))
+  if (!options.some((item) => item.id === 'default')) {
+    options.unshift({ id: 'default', name: '默认配置（default）' })
+  }
+  return options
+})
+
+function profileName(id?: string): string {
+  const target = (admin.confProfiles ?? []).find((item) => item.id === (id || 'default'))
+  return target?.name || id || '默认配置'
+}
+
 onMounted(() => {
+  void admin.loadConfProfiles()
   void load()
 })
 
@@ -253,6 +291,7 @@ function openEdit(template: Template): void {
   editingId.value = template.id
   Object.assign(form, {
     name: template.name,
+    base_conf_id: template.base_conf_id || 'default',
     description: template.description ?? '',
     persona_prompt: template.persona_prompt ?? '',
     begin_dialogs: (template.begin_dialogs ?? []).join('\n'),
@@ -319,6 +358,7 @@ async function submit(): Promise<void> {
 
   const payload: TemplateInput = {
     name,
+    base_conf_id: form.base_conf_id || 'default',
     description: form.description.trim(),
     persona_prompt: form.persona_prompt,
     begin_dialogs: form.begin_dialogs
@@ -403,6 +443,19 @@ const hasTemplates = computed(() => admin.templates.length > 0)
 .template-id {
   font-size: 0.72rem;
   margin-top: 2px;
+}
+
+.conf-cell {
+  font-size: 0.82rem;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.conf-note {
+  margin: 6px 0 0;
+  font-size: 0.75rem;
+  line-height: 1.6;
 }
 
 .desc-cell {

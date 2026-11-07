@@ -117,7 +117,10 @@ async def admin_list_users(request: web.Request) -> web.Response:
     rows = container.db.query(
         "SELECT u.*, "
         "(SELECT COUNT(*) FROM bots b WHERE b.user_id = u.id AND b.status != 'deleted') AS bot_count, "
-        "(SELECT balance FROM wallets w WHERE w.user_id = u.id) AS balance "
+        "(SELECT balance FROM wallets w WHERE w.user_id = u.id) AS balance, "
+        "(SELECT COALESCE(SUM(delta),0) FROM ledger l WHERE l.user_id = u.id AND delta > 0 AND type = 'grant') AS granted_points, "
+        "(SELECT COALESCE(SUM(-delta),0) FROM ledger l WHERE l.user_id = u.id AND delta < 0) AS deducted_points, "
+        "(SELECT COALESCE(used_tokens,0) FROM quotas q WHERE q.user_id = u.id) AS used_tokens "
         f"FROM users u WHERE {clause} ORDER BY u.created_at DESC LIMIT ? OFFSET ?",
         [*params, page_size, (page - 1) * page_size],
     )
@@ -128,6 +131,9 @@ async def admin_list_users(request: web.Request) -> web.Response:
                 **container.auth.public_user(row),
                 "bot_count": int(row.get("bot_count") or 0),
                 "balance": int(row.get("balance") or 0),
+                "granted_points": int(row.get("granted_points") or 0),
+                "deducted_points": int(row.get("deducted_points") or 0),
+                "used_tokens": int(row.get("used_tokens") or 0),
                 "quota": container.auth.quota_for(row["id"]),
             }
         )
@@ -159,6 +165,29 @@ async def admin_patch_user(request: web.Request) -> web.Response:
     if user is None:
         raise AppError("用户不存在", code="not_found", status=404)
     return ok({"user": container.auth.user_with_limits(user)})
+
+
+# ------------------------------------------------------ AstrBot profiles
+@routes.get("/api/admin/conf-profiles")
+async def admin_conf_profiles(request: web.Request) -> web.Response:
+    """AstrBot configuration profiles that a template can clone from."""
+    require_admin(request)
+    container = container_of(request)
+    try:
+        items = await container.port.list_conf_profiles()
+    except Exception:  # noqa: BLE001
+        items = [{"id": "default", "name": "默认配置", "is_default": True}]
+    if not items:
+        items = [{"id": "default", "name": "默认配置", "is_default": True}]
+    return ok({"items": items})
+
+
+# ------------------------------------------------------------- overview
+@routes.get("/api/admin/overview")
+async def admin_overview(request: web.Request) -> web.Response:
+    require_admin(request)
+    container = container_of(request)
+    return ok(container.billing.overview())
 
 
 # --------------------------------------------------------------- invites

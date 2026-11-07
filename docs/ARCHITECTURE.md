@@ -123,6 +123,13 @@ saas/memory/
 | 手动充值/账本 | 表结构就位；`/api/admin/orders` → 501，M3 实现 |
 | AstrBot 启动时孤儿 Bot 对账 | `stale_creating_rows()` 提供基础查询，M3 接入 |
 
+## 8.1 模板与 AstrBot 配置文件
+
+- `templates.base_conf_id` 指向 AstrBot 的配置文件（`astrbot_config_mgr.get_conf_list()`），
+  创建 Bot 时 `AstrBotAdapter.create_config` 从该配置文件深拷贝后叠加 `config_patch`。
+- 管理端 `GET /api/admin/conf-profiles` 暴露可选项；FakeAstrBot 提供 `default/conf_companion/conf_work` 用于演示与测试。
+- 配置文件被删除后，模板仍保存引用；创建 Bot 会明确报错并回滚，不会静默落回 default。
+
 ## 9. 额度与账本（M3 切片，已实现）
 
 - 模型：`wallets.balance` 只是缓存，**唯一事实来源是 append-only 的 `ledger`**；

@@ -219,7 +219,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusChip from '@/components/StatusChip.vue'
@@ -284,15 +284,29 @@ const { start: startPolling, stop: stopPolling } = usePolling(
   { interval: 2000, immediate: false },
 )
 
+const qrAutoStarted = ref(false)
+
 onMounted(async () => {
   void loadVersion()
   await reload()
-  if (bots.current?.qr) {
-    startPolling()
-  } else if (route.query.qr === '1' && bots.current?.status === 'pending_qr') {
-    await startQr()
-  }
 })
+
+// 创建后跳转 ?qr=1 时自动发起扫码；用 watch 避免与异步 loadBot 竞态。
+watch(
+  bot,
+  async (value) => {
+    if (!value || qrAutoStarted.value) return
+    qrAutoStarted.value = true
+    if (value.qr) {
+      startPolling()
+      return
+    }
+    if (route.query.qr === '1' && value.status === 'pending_qr') {
+      await startQr()
+    }
+  },
+  { immediate: true },
+)
 
 onBeforeUnmount(() => {
   stopPolling()

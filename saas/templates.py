@@ -75,6 +75,11 @@ class TemplateService:
             cleaned["name"] = name
         if "description" in payload:
             cleaned["description"] = str(payload.get("description") or "")[:500]
+        if "base_conf_id" in payload or not partial:
+            base_conf_id = str(payload.get("base_conf_id") or "default").strip() or "default"
+            if len(base_conf_id) > 128:
+                raise ValidationError("base_conf_id 不合法", field="base_conf_id")
+            cleaned["base_conf_id"] = base_conf_id
         if "persona_prompt" in payload:
             cleaned["persona_prompt"] = str(payload.get("persona_prompt") or "")
         for field_name in ("begin_dialogs", "user_overridable"):
@@ -132,7 +137,8 @@ class TemplateService:
         self.db.execute(
             "INSERT INTO templates(id, name, description, persona_prompt, begin_dialogs, "
             "config_patch, memory_defaults, privacy_defaults, quota, user_overridable, "
-            "enabled, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "enabled, created_by, created_at, updated_at, base_conf_id) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 template_id,
                 cleaned["name"],
@@ -148,6 +154,7 @@ class TemplateService:
                 actor_id,
                 now,
                 now,
+                cleaned.get("base_conf_id", "default"),
             ),
         )
         return self.get(template_id)
@@ -187,6 +194,7 @@ class TemplateService:
         return {
             "template_id": template["id"],
             "template_name": template["name"],
+            "base_conf_id": template.get("base_conf_id", "default"),
             "persona_prompt": template["persona_prompt"],
             "begin_dialogs": template["begin_dialogs"],
             "config_patch": template["config_patch"],

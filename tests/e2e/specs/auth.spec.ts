@@ -122,7 +122,7 @@ test.describe('管理员登录入口', () => {
     try {
       await page.goto('/console/')
       await expect(navLink(page, '管理后台')).toBeVisible()
-      await expect(page.getByRole('heading', { name: /欢迎回来/ })).toBeVisible()
+      await expect(page.getByRole('heading', { name: '总览' })).toBeVisible()
     } finally {
       await context.close()
       await admin.dispose()

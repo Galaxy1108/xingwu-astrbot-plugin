@@ -83,6 +83,8 @@ export interface PrivacyDefaults {
 export interface Template {
   id: string
   name: string
+  /** AstrBot configuration profile this template clones (default: "default"). */
+  base_conf_id?: string
   description: string
   persona_prompt: string
   begin_dialogs: string[]
@@ -99,6 +101,7 @@ export interface Template {
 /** 管理端模板创建/更新入参（字段同 Template，服务端校验必填项）。 */
 export interface TemplateInput {
   name: string
+  base_conf_id?: string
   description?: string
   persona_prompt?: string
   begin_dialogs?: string[]
@@ -199,6 +202,52 @@ export interface AdminUser extends User {
   bot_count: number
   quota: Quota
   balance: number
+  /** 平台点数账本累计充值（负数扣减/消费见 deducted_points） */
+  granted_points?: number
+  deducted_points?: number
+  /** 已用 Token（需接入计量；未接入时为 0） */
+  used_tokens?: number
+}
+
+export interface ConfProfile {
+  id: string
+  name: string
+  is_default?: boolean
+}
+
+export interface AdminOverview {
+  users: number
+  bots: number
+  ready_bots: number
+  /** 平台内预付费点数合计，不是上游模型账户余额 */
+  balance_total: number
+  granted_points: number
+  adjusted_in_points: number
+  deducted_points: number
+  tokens_used: number
+  tokens_metered: boolean
+  paid_orders: number
+  paid_orders_amount_cny: number
+  balance_scope: string
+}
+
+export interface UsagePoint {
+  date: string
+  delta: number
+  in: number
+  out: number
+  balance: number
+}
+
+export interface WalletUsage {
+  days: number
+  start: string
+  end: string
+  balance: number
+  total_in: number
+  total_out: number
+  points: UsagePoint[]
+  scope: string
 }
 
 export interface AdminUserPatch {

@@ -24,6 +24,7 @@ class FakeState:
     routes: dict[str, str] = field(default_factory=dict)
     platforms: dict[str, dict[str, Any]] = field(default_factory=dict)
     calls: list[str] = field(default_factory=list)
+    conf_profiles: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def snapshot(self) -> dict[str, Any]:
         return {
@@ -39,6 +40,19 @@ class FakeAstrBot:
 
     def __init__(self, *, fail_on: set[str] | None = None) -> None:
         self.state = FakeState()
+        self.state.conf_profiles = {
+            "default": {"id": "default", "name": "默认配置", "is_default": True},
+            "conf_companion": {
+                "id": "conf_companion",
+                "name": "陪伴型配置（示例）",
+                "is_default": False,
+            },
+            "conf_work": {
+                "id": "conf_work",
+                "name": "工作型配置（示例）",
+                "is_default": False,
+            },
+        }
         self.fail_on = set(fail_on or ())
         # platform -> qr session state
         self._qr: dict[str, dict[str, Any]] = {}
@@ -92,6 +106,9 @@ class FakeAstrBot:
         self.state.personas.pop(persona_name, None)
 
     # -- configs -------------------------------------------------------
+    async def list_conf_profiles(self) -> list[dict[str, Any]]:
+        return [dict(item) for item in self.state.conf_profiles.values()]
+
     async def create_config(
         self,
         *,
@@ -99,13 +116,17 @@ class FakeAstrBot:
         conf_name: str,
         persona_name: str,
         config_patch: dict[str, Any],
+        base_conf_id: str = "default",
     ) -> str:
         self._maybe_fail("create_config")
+        if base_conf_id not in self.state.conf_profiles:
+            raise ValueError(f"配置文件不存在：{base_conf_id}")
         conf_id = f"conf_{secrets.token_hex(8)}"
         self.state.configs[conf_id] = {
             "bot_id": bot_id,
             "name": conf_name,
             "persona_name": persona_name,
+            "base_conf_id": base_conf_id,
             "config_patch": dict(config_patch),
         }
         return conf_id
