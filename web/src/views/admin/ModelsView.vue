@@ -8,7 +8,7 @@
         <v-btn variant="text" prepend-icon="mdi-refresh" :loading="loading" @click="load">
           刷新
         </v-btn>
-        <v-btn color="primary" prepend-icon="mdi-plus" data-testid="model-create" @click="openCreate">
+        <v-btn color="primary" prepend-icon="mdi-plus" data-testid="model-create" @click="openCreate" variant="tonal">
           新建模型
         </v-btn>
       </template>
@@ -38,7 +38,7 @@
 
     <v-card v-else-if="models.length" class="table-card">
       <div class="table-scroll">
-        <v-table hover>
+        <v-table hover class="models-table">
           <thead>
             <tr>
               <th>名称</th>
@@ -211,7 +211,7 @@
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" :disabled="saving" @click="editorOpen = false">取消</v-btn>
-          <v-btn color="primary" :loading="saving" data-testid="model-save" @click="submit">
+          <v-btn color="primary" :loading="saving" data-testid="model-save" @click="submit" variant="tonal">
             {{ editingId ? '保存' : '创建' }}
           </v-btn>
         </v-card-actions>
@@ -395,6 +395,14 @@ onMounted(() => {
 
 .table-card {
   padding: 4px 0;
+}
+
+.models-table {
+  min-width: 1000px;
+}
+
+.models-table :deep(th) {
+  white-space: nowrap;
 }
 
 .table-scroll {

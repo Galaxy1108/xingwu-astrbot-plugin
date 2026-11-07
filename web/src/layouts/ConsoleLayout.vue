@@ -61,23 +61,7 @@
       <v-spacer />
 
       <div class="sidebar-footer">
-        <div v-if="!isRail" class="user-line">
-          <v-icon size="16">mdi-account-circle-outline</v-icon>
-          <span class="user-email" :title="auth.user?.email">{{ auth.user?.email || '未登录' }}</span>
-        </div>
-        <v-btn
-          block
-          variant="text"
-          size="small"
-          :prepend-icon="isRail ? undefined : 'mdi-logout'"
-          class="footer-btn"
-          aria-label="退出登录"
-          @click="onLogout"
-        >
-          <span v-if="!isRail">退出登录</span>
-          <v-icon v-else size="18">mdi-logout</v-icon>
-        </v-btn>
-        <div v-if="!isRail" class="version-line">AstrBot SaaS {{ auth.version || '0.3.0' }}</div>
+        <div v-if="!isRail" class="version-line">AstrBot SaaS {{ auth.version || '0.4.0' }}</div>
       </div>
     </div>
   </v-navigation-drawer>
@@ -89,9 +73,7 @@
     <v-btn icon variant="text" :aria-label="isDark ? '切换浅色主题' : '切换深色主题'" @click="toggleTheme">
       <v-icon>{{ isDark ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}</v-icon>
     </v-btn>
-    <v-chip v-if="auth.isAdmin" size="small" variant="tonal" color="primary" class="mr-2">
-      管理员
-    </v-chip>
+    <UserMenu context="console" class="mr-1" />
     <v-btn icon variant="text" aria-label="刷新页面" title="刷新页面" @click="refreshPage">
       <v-icon>mdi-refresh</v-icon>
     </v-btn>
@@ -106,16 +88,14 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { useDisplay } from 'vuetify'
 import { useAuthStore } from '@/stores/auth'
-import { useUiStore } from '@/stores/ui'
 import { useThemeMode } from '@/composables/useThemeMode'
+import UserMenu from '@/components/UserMenu.vue'
 
 const auth = useAuthStore()
-const ui = useUiStore()
 const route = useRoute()
-const router = useRouter()
 const { smAndDown } = useDisplay()
 const { isDark, toggle: toggleTheme } = useThemeMode()
 
@@ -130,23 +110,15 @@ watch(isMobile, (mobile) => {
 
 const navItems = [
   { to: '/', title: '总览', icon: 'mdi-view-dashboard-outline' },
-  { to: '/connect', title: '扫码接入', icon: 'mdi-qrcode-scan' },
   { to: '/bots', title: '我的 Bot', icon: 'mdi-robot-outline' },
   { to: '/settings/privacy', title: '隐私与加密', icon: 'mdi-shield-lock-outline' },
   { to: '/billing', title: '额度', icon: 'mdi-wallet-outline' },
-  { to: '/access-log', title: '访问记录', icon: 'mdi-file-eye-outline' },
 ]
 
 const currentTitle = computed(() => {
   const title = route.meta.title
   return typeof title === 'string' && title ? title : '控制台'
 })
-
-async function onLogout(): Promise<void> {
-  await auth.logout()
-  ui.notify('已退出登录', 'info')
-  await router.replace('/login')
-}
 
 function refreshPage(): void {
   window.location.reload()

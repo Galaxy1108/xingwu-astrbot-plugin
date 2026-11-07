@@ -5,7 +5,7 @@
         <v-btn variant="text" prepend-icon="mdi-refresh" :loading="admin.templatesLoading" @click="load">
           刷新
         </v-btn>
-        <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreate">新建模板</v-btn>
+        <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreate" variant="tonal">新建模板</v-btn>
       </template>
     </PageHeader>
 
@@ -28,7 +28,7 @@
 
     <v-card v-else-if="admin.templates.length" class="table-card">
       <div class="table-scroll">
-        <v-table hover>
+        <v-table hover class="templates-table">
           <thead>
             <tr>
               <th>名称</th>
@@ -105,15 +105,6 @@
           />
           <v-text-field v-model.trim="form.description" label="描述" class="mt-3" />
           <v-textarea
-            v-model="form.persona_prompt"
-            label="人格提示词（persona_prompt）"
-            rows="4"
-            auto-grow
-            hint="支持 {bot_name} 占位符"
-            persistent-hint
-            class="mt-3"
-          />
-          <v-textarea
             v-model="form.begin_dialogs"
             label="开场白（每行一条）"
             rows="3"
@@ -123,7 +114,7 @@
           <v-text-field
             v-model.trim="form.user_overridable"
             label="用户可改字段（逗号分隔）"
-            hint="例如 persona_prompt, begin_dialogs"
+            hint="例如 begin_dialogs, description"
             persistent-hint
             class="mt-3"
           />
@@ -195,7 +186,7 @@
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" :disabled="saving" @click="editorOpen = false">取消</v-btn>
-          <v-btn color="primary" :loading="saving" @click="submit">{{ editingId ? '保存' : '创建' }}</v-btn>
+          <v-btn color="primary" :loading="saving" @click="submit" variant="tonal">{{ editingId ? '保存' : '创建' }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -257,7 +248,6 @@ const emptyForm = () => ({
   base_conf_id: 'default',
   model_profile_id: '',
   description: '',
-  persona_prompt: '',
   begin_dialogs: '',
   enabled: true,
   user_overridable: '',
@@ -342,7 +332,6 @@ function openEdit(template: Template): void {
     base_conf_id: template.base_conf_id || 'default',
     model_profile_id: template.model_profile_id || '',
     description: template.description ?? '',
-    persona_prompt: template.persona_prompt ?? '',
     begin_dialogs: (template.begin_dialogs ?? []).join('\n'),
     enabled: template.enabled,
     user_overridable: (template.user_overridable ?? []).join(', '),
@@ -410,7 +399,6 @@ async function submit(): Promise<void> {
     base_conf_id: form.base_conf_id || 'default',
     model_profile_id: form.model_profile_id || '',
     description: form.description.trim(),
-    persona_prompt: form.persona_prompt,
     begin_dialogs: form.begin_dialogs
       .split('\n')
       .map((line) => line.trim())
@@ -480,6 +468,14 @@ const hasTemplates = computed(() => admin.templates.length > 0)
 <style scoped>
 .table-card {
   padding: 4px 0;
+}
+
+.templates-table {
+  min-width: 1040px;
+}
+
+.templates-table :deep(th) {
+  white-space: nowrap;
 }
 
 .table-scroll {

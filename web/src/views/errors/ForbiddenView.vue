@@ -11,7 +11,7 @@
         prepend-icon="mdi-home-outline"
         data-testid="back-home"
         to="/"
-      >
+       variant="tonal">
         返回总览
       </v-btn>
       <v-btn variant="tonal" prepend-icon="mdi-refresh" data-testid="reload-page" @click="reload">

@@ -27,6 +27,7 @@ export interface EncryptionInfo {
 export interface User {
   id: string
   email: string
+  display_name: string
   role: Role
   status: UserStatus
   created_at: number
@@ -44,6 +45,8 @@ export interface MeResponse {
   csrf_token: string
   limits: Limits
   version: string
+  astrbot_dashboard_url?: string
+  is_admin?: boolean
 }
 
 export interface OtpRequestPayload {
@@ -191,8 +194,15 @@ export interface PageResult<T> {
 export interface AccessLogEntry {
   id: number | string
   actor_id?: string
+  actor_name?: string
   actor_email?: string
+  bot_name?: string
+  admin_id?: string
+  user_id?: string
+  bot_id?: string
   action?: string
+  resource?: string
+  resource_id?: string
   target_type?: string
   target_id?: string
   reason?: string
@@ -469,11 +479,42 @@ export interface MemorySearchPayload {
   limit?: number
 }
 
+export interface MemorySnapshotNote {
+  short_id?: string
+  title?: string
+  content?: string
+  tags?: string[]
+  created_at?: number
+  updated_at?: number
+}
+
+/** 记忆快照（后端 export_snapshot：memories + notes，兼容旧 items 字段）。 */
 export interface MemoryExportResult {
+  version?: number
   bot_id: string
   exported_at: number
   count: number
-  items: MemoryItem[]
+  items?: MemoryItem[]
+  memories?: MemoryItem[]
+  tags?: string[]
+  notes_count?: number
+  notes?: MemorySnapshotNote[]
+}
+
+export interface MemoryImportCounts {
+  total: number
+  imported: number
+  skipped: number
+  failed: number
+}
+
+export interface MemoryImportReport {
+  bot_id: string
+  dry_run: boolean
+  memories: MemoryImportCounts
+  notes: MemoryImportCounts
+  errors?: string[]
+  short_id_map?: Record<string, string>
 }
 
 /* ------------------------------------------------------------------ */

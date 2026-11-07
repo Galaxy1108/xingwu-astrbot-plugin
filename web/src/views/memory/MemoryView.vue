@@ -9,6 +9,16 @@
         <v-btn variant="text" prepend-icon="mdi-magnify" @click="openSearch">检索预览</v-btn>
         <v-btn
           variant="tonal"
+          color="primary"
+          prepend-icon="mdi-upload"
+          data-testid="memory-import"
+          @click="openImport"
+        >
+          导入 JSON 快照
+        </v-btn>
+        <v-btn
+          variant="tonal"
+          color="primary"
           prepend-icon="mdi-download"
           :loading="exporting"
           data-testid="memory-export"
@@ -16,13 +26,6 @@
         >
           导出 JSON
         </v-btn>
-        <v-tooltip text="M2 通过 CLI 导入：saas/memory/migration/from_angel.py">
-          <template #activator="{ props }">
-            <span v-bind="props">
-              <v-btn variant="text" prepend-icon="mdi-import" disabled>导入</v-btn>
-            </span>
-          </template>
-        </v-tooltip>
         <v-btn variant="text" prepend-icon="mdi-refresh" :loading="bucket.loading" @click="reload">
           刷新
         </v-btn>
@@ -30,7 +33,7 @@
     </PageHeader>
 
     <v-alert type="info" variant="tonal" density="compact" class="mb-4" icon="mdi-brain">
-      记忆由对话自动记录；导入历史数据请使用 M2 CLI。编辑保存后以服务端结果为准（不做乐观更新）。
+      记忆由对话自动记录；可导入/导出 JSON 快照（含记忆与笔记，导入按内容去重）。编辑保存后以服务端结果为准。
     </v-alert>
 
     <v-card class="filter-card mb-4">
@@ -244,7 +247,7 @@
             <span>更新 {{ formatRelative(memory.updated_at) }}</span>
           </div>
           <div class="memory-card__actions">
-            <v-btn size="small" variant="tonal" @click="openEdit(memory)">编辑</v-btn>
+            <v-btn size="small" variant="outlined" @click="openEdit(memory)">编辑</v-btn>
             <v-btn size="small" variant="text" @click="togglePin(memory)">
               {{ memory.pinned ? '取消置顶' : '置顶' }}
             </v-btn>
@@ -334,7 +337,7 @@
 
         <div class="drawer-actions">
           <v-btn variant="text" :disabled="saving" @click="editorOpen = false">取消</v-btn>
-          <v-btn color="primary" :loading="saving" data-testid="memory-save" @click="saveEditor">
+          <v-btn color="primary" :loading="saving" data-testid="memory-save" @click="saveEditor" variant="tonal">
             保存
           </v-btn>
         </div>
@@ -370,7 +373,7 @@
               density="compact"
               class="search-limit"
             />
-            <v-btn color="primary" :loading="searchLoading" @click="runSearch">检索</v-btn>
+            <v-btn color="primary" :loading="searchLoading" @click="runSearch" variant="tonal">检索</v-btn>
           </div>
 
           <v-alert v-if="searchError" type="error" variant="tonal" density="compact" class="mt-3">
@@ -414,6 +417,67 @@
       </v-card>
     </v-dialog>
 
+    <v-dialog v-model="importOpen" max-width="560" persistent>
+      <v-card class="import-card">
+        <v-card-title class="dialog-title">导入 JSON 快照</v-card-title>
+        <v-card-text>
+          <v-alert type="info" variant="tonal" density="compact" class="mb-3">
+            快照由本页导出生成，包含记忆与笔记；导入按内容去重，可重复执行。
+          </v-alert>
+          <v-alert v-if="importError" type="error" variant="tonal" density="compact" class="mb-3">
+            {{ importError }}
+          </v-alert>
+          <v-file-input
+            v-model="importFile"
+            label="选择 JSON 快照"
+            accept=".json,application/json"
+            prepend-icon="mdi-paperclip"
+            density="compact"
+            show-size
+            class="mb-2"
+            @update:model-value="onImportFileChange"
+          />
+          <v-checkbox
+            v-model="importDryRun"
+            label="仅预检（dry-run，不写入）"
+            density="compact"
+            hide-details
+          />
+          <v-alert
+            v-if="importReport"
+            :type="importReport.dry_run ? 'info' : 'success'"
+            variant="tonal"
+            density="compact"
+            class="mt-3"
+            data-testid="memory-import-report"
+          >
+            <div>
+              记忆：导入 {{ importReport.memories.imported }} · 跳过 {{ importReport.memories.skipped }} ·
+              失败 {{ importReport.memories.failed }}
+            </div>
+            <div>
+              笔记：导入 {{ importReport.notes.imported }} · 跳过 {{ importReport.notes.skipped }} ·
+              失败 {{ importReport.notes.failed }}
+            </div>
+            <div v-if="importReport.dry_run" class="mt-1">当前为预检结果，未写入任何数据。</div>
+          </v-alert>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" :disabled="importing" @click="importOpen = false">关闭</v-btn>
+          <v-btn
+            color="primary"
+            variant="tonal"
+            :loading="importing"
+            data-testid="memory-import-submit"
+            @click="submitImport"
+          >
+            开始导入
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <ConfirmDialog
       v-model="deleteOpen"
       title="删除这条记忆？"
@@ -437,12 +501,13 @@ import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useBotsStore } from '@/stores/bots'
 import { useMemoryStore } from '@/stores/memory'
+import { importMemories } from '@/api/memory'
 import { useUiStore } from '@/stores/ui'
 import { useMemoryKindMeta } from '@/composables/useMemoryKindMeta'
 import { downloadJson } from '@/utils/download'
 import { errorMessage } from '@/utils/errors'
 import { formatDateTime, formatRelative, truncate } from '@/utils/format'
-import type { MemoryItem, MemoryKind, MemoryPatch } from '@/types'
+import type { MemoryImportReport, MemoryItem, MemoryKind, MemoryPatch } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -479,6 +544,13 @@ const importanceOptions = [1, 2, 3, 4, 5].map((value) => ({
 }))
 
 const exporting = ref(false)
+const importOpen = ref(false)
+const importFile = ref<File | File[] | null>(null)
+const importDryRun = ref(false)
+const importing = ref(false)
+const importError = ref('')
+const importReport = ref<MemoryImportReport | null>(null)
+let pendingSnapshot: Record<string, unknown> | null = null
 
 const editorOpen = ref(false)
 const editingId = ref<number | null>(null)
@@ -694,12 +766,73 @@ async function onExport(): Promise<void> {
   exporting.value = true
   try {
     const result = await memory.exportAll(botId.value)
-    downloadJson(`memories-${botId.value}.json`, result)
-    ui.notify(`已导出 ${result.count} 条记忆`, 'success')
+    downloadJson(`memories-${botId.value}-snapshot.json`, result)
+    ui.notify(`已导出 ${result.count} 条记忆（含笔记快照）`, 'success')
   } catch (error) {
     ui.notifyError(errorMessage(error, '导出记忆失败'))
   } finally {
     exporting.value = false
+  }
+}
+
+function openImport(): void {
+  importFile.value = null
+  importDryRun.value = false
+  importError.value = ''
+  importReport.value = null
+  pendingSnapshot = null
+  importOpen.value = true
+}
+
+function onImportFileChange(): void {
+  pendingSnapshot = null
+  importReport.value = null
+  importError.value = ''
+}
+
+function pickedFile(): File | null {
+  const value = importFile.value
+  if (Array.isArray(value)) return value[0] ?? null
+  return value
+}
+
+async function submitImport(): Promise<void> {
+  if (!botId.value) return
+  importError.value = ''
+  if (!pendingSnapshot) {
+    const file = pickedFile()
+    if (!file) {
+      importError.value = '请选择 JSON 快照文件'
+      return
+    }
+    try {
+      const parsed = JSON.parse(await file.text()) as unknown
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        importError.value = '快照必须是 JSON 对象'
+        return
+      }
+      pendingSnapshot = parsed as Record<string, unknown>
+    } catch {
+      importError.value = '文件不是合法的 JSON'
+      return
+    }
+  }
+
+  importing.value = true
+  try {
+    const report = await importMemories(botId.value, pendingSnapshot, importDryRun.value)
+    importReport.value = report
+    ui.notify(
+      report.dry_run
+        ? `预检完成：记忆 ${report.memories.imported} 条、笔记 ${report.notes.imported} 条（未写入）`
+        : `导入完成：记忆 ${report.memories.imported} 条、笔记 ${report.notes.imported} 条`,
+      'success',
+    )
+    if (!report.dry_run) await load()
+  } catch (error) {
+    importError.value = errorMessage(error, '导入快照失败')
+  } finally {
+    importing.value = false
   }
 }
 
@@ -961,6 +1094,16 @@ async function runSearch(): Promise<void> {
 
 .search-dialog {
   padding: 8px;
+}
+
+.import-card {
+  padding: 8px;
+}
+
+.import-card .dialog-title {
+  font-size: 1.05rem;
+  font-weight: 650;
+  padding: 12px 20px 0;
 }
 
 .search-title {

@@ -17,6 +17,7 @@ import type {
   AuditQuery,
   Bot,
   MemoryExportResult,
+  MemoryImportReport,
   MemoryItem,
   MemoryListQuery,
   MemoryPatch,
@@ -130,24 +131,31 @@ export function reconcileAdminWallet(
 }
 
 // ------------------------------------------------------------------ 管理端内容查看
-export function listAdminBotConversations(botId: string): Promise<AdminConversationList> {
+export function listAdminBotConversations(
+  botId: string,
+  confirm = false,
+): Promise<AdminConversationList> {
   return api.get<AdminConversationList>(
     `/admin/bots/${encodeURIComponent(botId)}/conversations`,
+    confirm ? { confirm: 1 } : undefined,
   )
 }
 
 export function listAdminBotMemories(
   botId: string,
   query: MemoryListQuery = {},
+  confirm = false,
 ): Promise<PageResult<MemoryItem>> {
+  const params: Record<string, string | number | undefined> = {
+    page: query.page,
+    page_size: query.page_size,
+    kind: query.kind,
+    q: query.q,
+  }
+  if (confirm) params.confirm = 1
   return api.get<PageResult<MemoryItem>>(
     `/admin/bots/${encodeURIComponent(botId)}/memories`,
-    {
-      page: query.page,
-      page_size: query.page_size,
-      kind: query.kind,
-      q: query.q,
-    },
+    params,
   )
 }
 
@@ -155,9 +163,10 @@ export function patchAdminBotMemory(
   botId: string,
   memoryId: number,
   payload: MemoryPatch,
+  confirm = false,
 ): Promise<{ memory: MemoryItem }> {
   return api.patch<{ memory: MemoryItem }>(
-    `/admin/bots/${encodeURIComponent(botId)}/memories/${memoryId}`,
+    `/admin/bots/${encodeURIComponent(botId)}/memories/${memoryId}${confirm ? '?confirm=1' : ''}`,
     payload,
   )
 }
@@ -165,17 +174,34 @@ export function patchAdminBotMemory(
 export function deleteAdminBotMemory(
   botId: string,
   memoryId: number,
+  confirm = false,
 ): Promise<{ deleted: boolean }> {
   return api.delete<{ deleted: boolean }>(
-    `/admin/bots/${encodeURIComponent(botId)}/memories/${memoryId}`,
+    `/admin/bots/${encodeURIComponent(botId)}/memories/${memoryId}${confirm ? '?confirm=1' : ''}`,
   )
 }
 
 /** 管理端记忆导出：必须显式二次确认，服务端会记录审计。 */
-export function exportAdminBotMemories(botId: string): Promise<MemoryExportResult> {
+export function exportAdminBotMemories(
+  botId: string,
+  confirm = false,
+): Promise<MemoryExportResult> {
   return api.post<MemoryExportResult>(
-    `/admin/bots/${encodeURIComponent(botId)}/memories/export`,
+    `/admin/bots/${encodeURIComponent(botId)}/memories/export${confirm ? '?confirm=1' : ''}`,
     { confirm: true },
+  )
+}
+
+/** 管理端快照导入；加密用户需 confirm=1（服务端记录访问审计）。 */
+export function importAdminBotMemories(
+  botId: string,
+  snapshot: Record<string, unknown>,
+  dryRun = false,
+  confirm = false,
+): Promise<MemoryImportReport> {
+  return api.post<MemoryImportReport>(
+    `/admin/bots/${encodeURIComponent(botId)}/memories/import${confirm ? '?confirm=1' : ''}`,
+    { snapshot, dry_run: dryRun },
   )
 }
 

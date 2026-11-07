@@ -17,7 +17,7 @@
       <template v-else-if="status === 'expired'">
         <v-icon size="64" color="error">mdi-qrcode-remove</v-icon>
         <p class="qr-stage-text">二维码已过期（自动刷新已达上限），请重新生成。</p>
-        <v-btn color="primary" :loading="busy" @click="emit('regenerate')">重新生成二维码</v-btn>
+        <v-btn color="primary" :loading="busy" @click="emit('regenerate')" variant="tonal">重新生成二维码</v-btn>
       </template>
 
       <template v-else>

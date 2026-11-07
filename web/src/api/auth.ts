@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { MeResponse, OtpRequestResult, OtpVerifyResult } from '@/types'
+import type { MeResponse, OtpRequestResult, OtpVerifyResult, User } from '@/types'
 
 export function requestOtp(email: string, invite?: string): Promise<OtpRequestResult> {
   const body: Record<string, string> = { email }
@@ -23,4 +23,9 @@ export function logoutRequest(): Promise<{ ok?: boolean }> {
 
 export function fetchMe(): Promise<MeResponse> {
   return api.get<MeResponse>('/me')
+}
+
+/** 更新显示用户名（1–32 字），返回更新后的用户。 */
+export function updateProfile(displayName: string): Promise<{ user: User }> {
+  return api.patch<{ user: User }>('/me/profile', { display_name: displayName })
 }

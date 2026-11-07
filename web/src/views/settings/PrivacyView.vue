@@ -5,7 +5,6 @@
       description="关闭加密会立即解密全部历史数据；开启会重新加密。操作在后台执行，可离开页面。"
     >
       <template #actions>
-        <v-btn variant="tonal" prepend-icon="mdi-file-eye-outline" to="/access-log">访问记录</v-btn>
         <v-btn variant="text" prepend-icon="mdi-refresh" :loading="loading" @click="load">刷新</v-btn>
       </template>
     </PageHeader>
@@ -37,6 +36,30 @@
         :busy="switching"
         @toggle="onToggle"
       />
+
+      <v-card class="access-card mt-4" data-testid="privacy-access-log">
+        <div class="access-head">
+          <div>
+            <h2 class="section-title">访问记录</h2>
+            <p class="access-desc text-muted">
+              管理员查看你的对话或记忆时会产生记录；仅在你关闭加密后管理员才可查看内容。
+            </p>
+          </div>
+          <v-btn variant="text" size="small" prepend-icon="mdi-refresh" :loading="accessLoading" @click="loadAccessLog">
+            刷新
+          </v-btn>
+        </div>
+        <AccessLogTable
+          :items="accessItems"
+          :loading="accessLoading"
+          :error="accessError"
+          :page="accessPage"
+          :page-size="accessPageSize"
+          :total="accessTotal"
+          @retry="loadAccessLog"
+          @update:page="onAccessPage"
+        />
+      </v-card>
 
       <v-card class="privacy-info mt-4">
         <h2 class="section-title">关于加密</h2>
@@ -90,9 +113,13 @@ import PageHeader from '@/components/PageHeader.vue'
 import EncryptionSwitch from '@/components/EncryptionSwitch.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
+import AccessLogTable from '@/components/AccessLogTable.vue'
 import { useEncryptionStore } from '@/stores/encryption'
 import { useUiStore } from '@/stores/ui'
+import { listAccessLog } from '@/api/privacy'
+import type { ApiError } from '@/api/client'
 import { errorMessage } from '@/utils/errors'
+import type { AccessLogEntry } from '@/types'
 
 const encryption = useEncryptionStore()
 const ui = useUiStore()
@@ -102,6 +129,13 @@ const switching = ref(false)
 const error = ref('')
 const confirmOpen = ref(false)
 const pendingEnabled = ref(true)
+
+const accessItems = ref<AccessLogEntry[]>([])
+const accessTotal = ref(0)
+const accessPage = ref(1)
+const accessPageSize = ref(20)
+const accessLoading = ref(false)
+const accessError = ref<ApiError | null>(null)
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 const directionText = computed(() => (encryption.enabled ? '解密' : '加密'))
@@ -112,7 +146,7 @@ const confirmMessage = computed(() =>
 )
 
 onMounted(() => {
-  void load()
+  void Promise.allSettled([load(), loadAccessLog()])
 })
 
 onBeforeUnmount(() => {
@@ -143,6 +177,27 @@ function startPolling(): void {
       switching.value = false
     }
   }, 1500)
+}
+
+async function loadAccessLog(): Promise<void> {
+  accessLoading.value = true
+  accessError.value = null
+  try {
+    const result = await listAccessLog(accessPage.value, accessPageSize.value)
+    accessItems.value = result.items ?? []
+    accessTotal.value = result.total ?? 0
+    accessPage.value = result.page ?? accessPage.value
+    accessPageSize.value = result.page_size ?? accessPageSize.value
+  } catch (err) {
+    accessError.value = err as ApiError
+  } finally {
+    accessLoading.value = false
+  }
+}
+
+async function onAccessPage(page: number): Promise<void> {
+  accessPage.value = page
+  await loadAccessLog()
 }
 
 async function load(): Promise<void> {
@@ -193,6 +248,26 @@ async function retry(): Promise<void> {
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.access-card {
+  padding: 20px;
+}
+
+.access-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.access-desc {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  max-width: 680px;
 }
 
 .privacy-info {

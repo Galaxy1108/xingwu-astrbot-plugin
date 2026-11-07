@@ -109,9 +109,16 @@ class AuditService:
                 f"SELECT COUNT(*) AS c FROM content_access_logs {clause}", params, 0
             )
         )
+        joined = clause.replace("bot_id", "c.bot_id").replace(
+            "user_id", "c.user_id"
+        ).replace("admin_id", "c.admin_id")
         rows = self.db.query(
-            f"SELECT * FROM content_access_logs {clause} "
-            "ORDER BY id DESC LIMIT ? OFFSET ?",
+            "SELECT c.*, COALESCE(NULLIF(u.display_name, ''), u.email, c.admin_id) "
+            "AS actor_name, u.email AS actor_email, b.name AS bot_name "
+            "FROM content_access_logs c "
+            "LEFT JOIN users u ON u.id = c.admin_id "
+            "LEFT JOIN bots b ON b.id = c.bot_id "
+            f"{joined} ORDER BY c.id DESC LIMIT ? OFFSET ?",
             [*params, page_size, (page - 1) * page_size],
         )
         return {"items": rows, "total": total, "page": page, "page_size": page_size}

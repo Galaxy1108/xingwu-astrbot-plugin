@@ -28,18 +28,34 @@
       </div>
 
       <v-list nav density="compact" class="nav-list">
+        <template v-for="group in navGroups" :key="group.title">
+          <div v-if="!isRail" class="nav-group-title">{{ group.title }}</div>
+          <v-divider v-else-if="group.title !== navGroups[0].title" class="my-2" />
+          <v-list-item
+            v-for="item in group.items"
+            :key="item.to"
+            :to="item.to"
+            :prepend-icon="item.icon"
+            :title="isRail ? undefined : item.title"
+            rounded="lg"
+            color="primary"
+            class="nav-item"
+            :aria-label="item.title"
+          />
+        </template>
+
+        <v-divider class="my-2" />
         <v-list-item
-          v-for="item in navItems"
-          :key="item.to"
-          :to="item.to"
-          :prepend-icon="item.icon"
-          :title="isRail ? undefined : item.title"
+          v-if="auth.isAdmin && auth.astrbotDashboardUrl"
+          prepend-icon="mdi-open-in-new"
+          :title="isRail ? undefined : 'AstrBot 后台'"
           rounded="lg"
           color="primary"
           class="nav-item"
-          :aria-label="item.title"
+          aria-label="AstrBot 后台"
+          data-testid="admin-astrbot-dashboard"
+          @click="openDashboard"
         />
-        <v-divider class="my-2" />
         <v-list-item
           to="/"
           prepend-icon="mdi-arrow-left"
@@ -54,23 +70,7 @@
       <v-spacer />
 
       <div class="sidebar-footer">
-        <div v-if="!isRail" class="user-line">
-          <v-icon size="16">mdi-account-circle-outline</v-icon>
-          <span class="user-email" :title="auth.user?.email">{{ auth.user?.email || '未登录' }}</span>
-        </div>
-        <v-btn
-          block
-          variant="text"
-          size="small"
-          :prepend-icon="isRail ? undefined : 'mdi-logout'"
-          class="footer-btn"
-          aria-label="退出登录"
-          @click="onLogout"
-        >
-          <span v-if="!isRail">退出登录</span>
-          <v-icon v-else size="18">mdi-logout</v-icon>
-        </v-btn>
-        <div v-if="!isRail" class="version-line">AstrBot SaaS {{ auth.version || '0.3.0' }}</div>
+        <div v-if="!isRail" class="version-line">AstrBot SaaS {{ auth.version || '0.4.0' }}</div>
       </div>
     </div>
   </v-navigation-drawer>
@@ -82,7 +82,7 @@
     <v-btn icon variant="text" :aria-label="isDark ? '切换浅色主题' : '切换深色主题'" @click="toggleTheme">
       <v-icon>{{ isDark ? 'mdi-weather-night' : 'mdi-white-balance-sunny' }}</v-icon>
     </v-btn>
-    <v-chip size="small" variant="tonal" color="primary" class="mr-2">管理员模式</v-chip>
+    <UserMenu context="admin" class="mr-1" />
   </v-app-bar>
 
   <v-main class="admin-main">
@@ -94,16 +94,14 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { useDisplay } from 'vuetify'
 import { useAuthStore } from '@/stores/auth'
-import { useUiStore } from '@/stores/ui'
 import { useThemeMode } from '@/composables/useThemeMode'
+import UserMenu from '@/components/UserMenu.vue'
 
 const auth = useAuthStore()
-const ui = useUiStore()
 const route = useRoute()
-const router = useRouter()
 const { smAndDown } = useDisplay()
 const { isDark, toggle: toggleTheme } = useThemeMode()
 
@@ -116,14 +114,24 @@ watch(isMobile, (mobile) => {
   drawerOpen.value = !mobile
 })
 
-const navItems = [
-  { to: '/admin/templates', title: '模板管理', icon: 'mdi-file-document-multiple-outline' },
-  { to: '/admin/users', title: '用户管理', icon: 'mdi-account-group-outline' },
-  { to: '/admin/bots', title: 'Bot 管理', icon: 'mdi-robot-outline' },
-  { to: '/admin/models', title: '模型与定价', icon: 'mdi-robot-happy-outline' },
-  { to: '/admin/settings', title: '记忆 API 设置', icon: 'mdi-api-cog' },
-  { to: '/admin/audit', title: '审计日志', icon: 'mdi-clipboard-text-clock-outline' },
-  { to: '/admin/orders', title: '手动充值', icon: 'mdi-cash-plus' },
+const navGroups = [
+  {
+    title: '运营管理',
+    items: [
+      { to: '/admin/templates', title: '模板管理', icon: 'mdi-file-document-multiple-outline' },
+      { to: '/admin/users', title: '用户管理', icon: 'mdi-account-group-outline' },
+      { to: '/admin/bots', title: 'Bot 管理', icon: 'mdi-robot-outline' },
+      { to: '/admin/orders', title: '手动充值', icon: 'mdi-cash-plus' },
+    ],
+  },
+  {
+    title: '系统设置',
+    items: [
+      { to: '/admin/models', title: '模型与定价', icon: 'mdi-robot-happy-outline' },
+      { to: '/admin/settings', title: '记忆 API 设置', icon: 'mdi-tune-variant' },
+      { to: '/admin/audit', title: '审计日志', icon: 'mdi-clipboard-text-clock-outline' },
+    ],
+  },
 ]
 
 const currentTitle = computed(() => {
@@ -131,10 +139,9 @@ const currentTitle = computed(() => {
   return typeof title === 'string' && title ? title : '管理后台'
 })
 
-async function onLogout(): Promise<void> {
-  await auth.logout()
-  ui.notify('已退出登录', 'info')
-  await router.replace('/login')
+function openDashboard(): void {
+  if (!auth.astrbotDashboardUrl) return
+  window.open(auth.astrbotDashboardUrl, '_blank', 'noopener,noreferrer')
 }
 </script>
 
@@ -177,6 +184,15 @@ async function onLogout(): Promise<void> {
 
 .nav-list {
   padding: 6px 8px;
+}
+
+.nav-group-title {
+  padding: 14px 12px 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--console-text-muted);
 }
 
 :deep(.nav-item) {

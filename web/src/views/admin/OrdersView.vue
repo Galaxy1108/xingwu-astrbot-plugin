@@ -11,7 +11,7 @@
         <v-btn variant="tonal" prepend-icon="mdi-account-cash-outline" @click="openAdjust">
           手动加/扣额度
         </v-btn>
-        <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreate">新建充值单</v-btn>
+        <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreate" variant="tonal">新建充值单</v-btn>
       </template>
     </PageHeader>
 
@@ -175,7 +175,7 @@
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" :disabled="creating" @click="createOpen = false">取消</v-btn>
-          <v-btn color="primary" :loading="creating" data-testid="order-create-submit" @click="submitCreate">
+          <v-btn color="primary" :loading="creating" data-testid="order-create-submit" @click="submitCreate" variant="tonal">
             创建
           </v-btn>
         </v-card-actions>
@@ -236,7 +236,7 @@
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" :disabled="adjusting" @click="adjustOpen = false">取消</v-btn>
-          <v-btn color="primary" :loading="adjusting" data-testid="ledger-submit" @click="submitAdjust">
+          <v-btn color="primary" :loading="adjusting" data-testid="ledger-submit" @click="submitAdjust" variant="tonal">
             提交
           </v-btn>
         </v-card-actions>

@@ -10,7 +10,7 @@
           :key="action.label"
           :to="action.to"
           :color="action.color || 'primary'"
-          :variant="action.variant || 'flat'"
+          :variant="action.variant || 'tonal'"
           @click="action.onClick?.()"
         >
           {{ action.label }}

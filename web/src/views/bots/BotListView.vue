@@ -2,8 +2,8 @@
   <div>
     <PageHeader title="我的 Bot" description="查看状态、启停与扫码接入；删除等危险操作在详情页。">
       <template #actions>
-        <v-btn variant="tonal" prepend-icon="mdi-qrcode-scan" to="/connect">扫码接入</v-btn>
-        <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreate">新建 Bot</v-btn>
+        <v-btn variant="tonal" color="primary" prepend-icon="mdi-qrcode-scan" to="/connect">扫码接入</v-btn>
+        <v-btn color="primary" prepend-icon="mdi-plus" @click="openCreate" variant="tonal">新建 Bot</v-btn>
       </template>
     </PageHeader>
 
@@ -49,7 +49,7 @@
             <span class="text-muted">{{ bot.last_active_at ? `最近活跃 ${formatRelative(bot.last_active_at)}` : '尚未活跃' }}</span>
           </div>
           <div class="bot-card__actions">
-            <v-btn variant="tonal" size="small" :to="`/bots/${bot.id}`">查看详情</v-btn>
+            <v-btn variant="outlined" size="small" :to="`/bots/${bot.id}`">查看详情</v-btn>
             <v-btn
               v-if="bot.status === 'pending_qr'"
               color="primary"
@@ -168,7 +168,7 @@
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" :disabled="creating" @click="createOpen = false">取消</v-btn>
-          <v-btn color="primary" :loading="creating" @click="submitCreate">创建</v-btn>
+          <v-btn color="primary" :loading="creating" @click="submitCreate" variant="tonal">创建</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

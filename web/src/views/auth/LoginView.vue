@@ -87,7 +87,7 @@
             block
             color="primary"
             size="large"
-            variant="flat"
+            variant="tonal"
             :loading="loading"
             class="mt-4"
             data-testid="login-request"
@@ -144,7 +144,7 @@
             block
             color="primary"
             size="large"
-            variant="flat"
+            variant="tonal"
             class="mt-6"
             :loading="loading"
             data-testid="login-verify"

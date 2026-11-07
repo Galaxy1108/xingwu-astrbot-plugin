@@ -94,7 +94,7 @@
         <v-table hover class="users-table">
           <thead>
             <tr>
-              <th>邮箱</th>
+              <th>用户</th>
               <th>状态</th>
               <th class="nowrap">Bot / 配额</th>
               <th class="nowrap">余额 / 充值 / 扣减</th>
@@ -106,19 +106,22 @@
           </thead>
           <tbody>
             <tr v-for="user in admin.users" :key="user.id">
-              <td>
-                <div class="user-email">
-                  {{ user.email }}
+              <td class="user-cell">
+                <div class="user-name-row">
+                  <span class="user-name" :title="user.display_name || user.email">
+                    {{ user.display_name || user.email.split('@')[0] }}
+                  </span>
                   <v-chip
                     v-if="user.role === 'admin'"
                     size="x-small"
                     variant="tonal"
                     color="primary"
-                    class="ml-1 role-chip"
+                    class="role-chip"
                   >
                     管理员
                   </v-chip>
                 </div>
+                <div class="user-email" :title="user.email">{{ user.email }}</div>
                 <div class="text-mono text-muted user-id">{{ user.id }}</div>
               </td>
               <td><StatusChip :status="user.status" kind="user" /></td>
@@ -178,8 +181,16 @@
 
     <v-dialog v-model="quotaOpen" max-width="480">
       <v-card class="dialog-card">
-        <v-card-title class="dialog-title">配额 · {{ quotaUser?.email }}</v-card-title>
+        <v-card-title class="dialog-title">配额详情</v-card-title>
         <v-card-text>
+          <div class="quota-user">
+            <div class="quota-user__name" :title="quotaUser?.display_name || quotaUser?.email">
+              {{ quotaUser?.display_name || quotaUser?.email }}
+            </div>
+            <div class="quota-user__email text-muted" :title="quotaUser?.email">
+              {{ quotaUser?.email }}
+            </div>
+          </div>
           <dl class="quota-list">
             <div><dt>Bot 上限</dt><dd>{{ quotaUser?.quota?.max_bots ?? '—' }}</dd></div>
             <div><dt>记忆条数上限</dt><dd>{{ formatNumber(quotaUser?.quota?.max_memories) }}</dd></div>
@@ -372,8 +383,36 @@ async function confirmToggle(): Promise<void> {
   overflow-x: auto;
 }
 
-.user-email {
+.users-table {
+  min-width: 1080px;
+}
+
+.user-cell {
+  min-width: 210px;
+  max-width: 280px;
+}
+
+.user-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.user-name {
   font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-email {
+  font-size: 0.76rem;
+  color: var(--console-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 1px;
 }
 
 .user-id {
@@ -443,7 +482,25 @@ async function confirmToggle(): Promise<void> {
   font-size: 1.05rem;
   font-weight: 650;
   padding: 12px 20px 0;
-  overflow-wrap: anywhere;
+}
+
+.quota-user {
+  margin-bottom: 10px;
+  min-width: 0;
+}
+
+.quota-user__name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quota-user__email {
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .quota-list {

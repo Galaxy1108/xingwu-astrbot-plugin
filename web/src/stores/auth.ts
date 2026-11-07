@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { fetchMe as fetchMeApi, logoutRequest, requestOtp, verifyOtp } from '@/api/auth'
+import { fetchMe as fetchMeApi, logoutRequest, requestOtp, updateProfile, verifyOtp } from '@/api/auth'
 import { isApiError } from '@/api/client'
 import type { Limits, MeResponse, User } from '@/types'
 
@@ -8,6 +8,7 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
   const limits = ref<Limits | null>(null)
   const version = ref('')
+  const astrbotDashboardUrl = ref('')
   const status = ref<'idle' | 'loading' | 'ready'>('idle')
   const lastError = ref<string | null>(null)
 
@@ -20,6 +21,7 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = me.user
     limits.value = me.limits ?? null
     version.value = me.version ?? ''
+    astrbotDashboardUrl.value = me.astrbot_dashboard_url ?? ''
   }
 
   /** 启动时拉取会话；401 视为未登录，其它错误向上抛给调用方决定文案。 */
@@ -72,6 +74,12 @@ export const useAuthStore = defineStore('auth', () => {
     return result
   }
 
+  async function updateDisplayName(displayName: string) {
+    const result = await updateProfile(displayName)
+    if (user.value) user.value = { ...user.value, ...result.user }
+    return result.user
+  }
+
   async function logout(): Promise<void> {
     try {
       await logoutRequest()
@@ -84,6 +92,7 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = null
     limits.value = null
     version.value = ''
+    astrbotDashboardUrl.value = ''
     status.value = 'ready'
     lastError.value = null
   }
@@ -92,6 +101,7 @@ export const useAuthStore = defineStore('auth', () => {
     user,
     limits,
     version,
+    astrbotDashboardUrl,
     status,
     lastError,
     ready,
@@ -102,6 +112,7 @@ export const useAuthStore = defineStore('auth', () => {
     ensureLoaded,
     loginRequest,
     loginVerify,
+    updateDisplayName,
     logout,
     clear,
   }

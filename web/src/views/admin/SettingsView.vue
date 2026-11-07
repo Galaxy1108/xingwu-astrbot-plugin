@@ -129,7 +129,7 @@
                 :loading="savingEmbedding"
                 data-testid="memory-settings-save-embedding"
                 @click="saveEmbedding"
-              >
+               variant="tonal">
                 保存
               </v-btn>
               <v-btn
@@ -252,7 +252,7 @@
                 :loading="savingRerank"
                 data-testid="memory-settings-save-rerank"
                 @click="saveRerank"
-              >
+               variant="tonal">
                 保存
               </v-btn>
               <v-btn
@@ -352,7 +352,7 @@
         </v-row>
 
         <div class="card-actions">
-          <v-btn color="primary" :loading="savingBehavior" @click="saveBehavior">保存检索行为</v-btn>
+          <v-btn color="primary" :loading="savingBehavior" @click="saveBehavior" variant="tonal">保存检索行为</v-btn>
         </div>
       </v-card>
 

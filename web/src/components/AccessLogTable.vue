@@ -32,16 +32,11 @@
           <tbody>
             <tr v-for="item in items" :key="String(item.id)">
               <td class="nowrap">{{ formatDateTime(item.created_at) }}</td>
-              <td>{{ item.actor_email || item.actor_id || '—' }}</td>
-              <td>{{ item.action || '—' }}</td>
-              <td class="nowrap">
-                <span v-if="item.target_type || item.target_id">
-                  {{ item.target_type || '—' }}<span v-if="item.target_id" class="text-mono"> · {{ shortId(item.target_id) }}</span>
-                </span>
-                <span v-else>—</span>
-              </td>
+              <td>{{ actorLabel(item) }}</td>
+              <td>{{ actionLabel(item) }}</td>
+              <td class="nowrap">{{ targetLabel(item) }}</td>
               <td class="text-mono">{{ item.ip || '—' }}</td>
-              <td class="detail-cell" :title="detailText(item.detail)">{{ detailText(item.detail) }}</td>
+              <td class="detail-cell" :title="detailText(item.detail, item.reason)">{{ detailText(item.detail, item.reason) }}</td>
             </tr>
           </tbody>
         </v-table>
@@ -87,7 +82,31 @@ const emit = defineEmits<{
 
 const pageCount = computed(() => Math.max(1, Math.ceil(props.total / Math.max(1, props.pageSize))))
 
-function detailText(detail: unknown): string {
+function actorLabel(item: AccessLogEntry): string {
+  return item.actor_name || item.actor_email || item.actor_id || item.admin_id || '—'
+}
+
+function actionLabel(item: AccessLogEntry): string {
+  if (item.action) return item.action
+  const labels: Record<string, string> = {
+    conversation: '查看对话',
+    memory: '查看记忆',
+    memory_export: '导出记忆',
+    memory_import: '导入记忆',
+  }
+  return item.resource ? labels[item.resource] ?? item.resource : '—'
+}
+
+function targetLabel(item: AccessLogEntry): string {
+  if (item.bot_name) return `Bot · ${item.bot_name}`
+  const type = item.target_type || item.resource || ''
+  const id = item.target_id || item.resource_id || item.bot_id || ''
+  if (!type && !id) return '—'
+  return type ? `${type}${id ? ` · ${shortId(id)}` : ''}` : shortId(id)
+}
+
+function detailText(detail: unknown, reason?: string): string {
+  if (reason === 'confirmed_encrypted') return '加密内容 · 已确认解密查看'
   if (detail === null || detail === undefined || detail === '') return '—'
   if (typeof detail === 'string') return truncate(detail, 80)
   try {

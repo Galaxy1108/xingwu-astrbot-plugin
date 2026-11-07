@@ -55,7 +55,7 @@
 
     <v-card v-else-if="admin.audit.length" class="table-card">
       <div class="table-scroll">
-        <v-table hover>
+        <v-table hover class="audit-table">
           <thead>
             <tr>
               <th>时间</th>
@@ -211,6 +211,14 @@ function detailText(detail: unknown): string {
 
 .table-card {
   padding: 4px 0;
+}
+
+.audit-table {
+  min-width: 1000px;
+}
+
+.audit-table :deep(th) {
+  white-space: nowrap;
 }
 
 .table-scroll {

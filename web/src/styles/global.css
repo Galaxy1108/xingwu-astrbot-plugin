@@ -205,8 +205,18 @@ a:hover {
   background: transparent !important;
 }
 
+/* 管理端表格：表头不竖排；窄屏用横向滚动，最小宽度由各页面设置 */
+.v-table th {
+  white-space: nowrap;
+}
+
 .v-table {
   background: transparent !important;
+}
+
+/* 管理端表格：表头不竖排；窄屏用横向滚动，最小宽度由各页面设置 */
+.v-table th {
+  white-space: nowrap;
 }
 
 .v-btn {
@@ -256,4 +266,34 @@ a:hover {
  */
 .v-label.v-field-label {
   transition-duration: 0s !important;
+}
+
+/* 暗色：输入占位符 / 辅助提示 / 未配置状态保证对比度 */
+.v-theme--dark .v-field__input::placeholder,
+.v-theme--dark textarea::placeholder {
+  color: rgba(255, 255, 255, 0.58) !important;
+  opacity: 1;
+}
+
+.v-theme--dark .v-label.v-field-label {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.v-theme--dark .v-messages__message,
+.v-theme--dark .v-input__details .v-messages {
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.v-theme--dark .v-field__input {
+  color: var(--console-text);
+}
+
+.v-theme--dark .v-card {
+  background: var(--console-surface);
+}
+
+/* 管理端内容抽屉的加密提示/导入按钮在暗色下保持可读 */
+.v-theme--dark .admin-content-drawer .access-alert,
+.v-theme--dark .admin-content-drawer .encrypted-alert {
+  color: var(--console-text);
 }

@@ -107,7 +107,7 @@
         :loading="creating"
         :disabled="templates.length === 0"
         @click="onCreate"
-      >
+       variant="tonal">
         创建并生成二维码
       </v-btn>
       <p class="form-note text-muted">
@@ -196,10 +196,10 @@
             「{{ finishedBot?.name || createdBot?.name || name }}」已完成扫码，正在上线（通常 5 秒内生效）。
           </p>
           <div class="done-actions">
-            <v-btn color="primary" :to="finishedBot ? `/bots/${finishedBot.id}` : '/bots'">
+            <v-btn color="primary" :to="finishedBot ? `/bots/${finishedBot.id}` : '/bots'" variant="tonal">
               查看 Bot 详情
             </v-btn>
-            <v-btn variant="tonal" to="/bots">返回列表</v-btn>
+            <v-btn variant="text" to="/bots">返回列表</v-btn>
           </div>
         </v-card>
       </div>

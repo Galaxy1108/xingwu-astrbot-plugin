@@ -89,10 +89,10 @@ saas/
 
 ## 测试与验收
 
-- 后端：`tests/`（190 例）覆盖 M1（邀请 410、OTP、会话/禁用、CSRF、模板快照/下架、配额、回滚、跨租户、QR 时序、凭据加密、删除清理）、
+- 后端：`tests/`（222 例）覆盖 M1（邀请 410、OTP、会话/禁用、CSRF、模板快照/下架、配额、回滚、跨租户、QR 时序、凭据加密、删除清理）、
   M2（契约双实现、去重、排序、跨 Bot、10k FTS、向量/重排/RRF、笔记、巩固衰减、导入导出）、
   M3（加密开关全部解密/重新加密、回填任务、管理员内容查看与访问留痕）、M4（模型目录、定价、用量幂等、账本一致）。
-- 前端：`web/` 内 Vitest（68 例：守卫 401/403、ConfirmDialog、API client、记忆/额度/加密、管理端内容抽屉、记忆设置/模型定价表单）。
+- 前端：`web/` 内 Vitest（70 例：守卫 401/403、ConfirmDialog、API client、记忆/额度/加密、管理端内容抽屉与加密确认、记忆设置/模型定价表单）。
 - E2E：`tests/e2e/`（Playwright，使用系统 chromium；12 例：M1 登录/权限/扫码/管理端 + M2 记忆页 + M3 额度/加密开关）；验收记录见 `docs/ACCEPTANCE.md`。
 - 向量回填：`python scripts/memory_reindex.py --data-dir devdata`（需先在 `/admin/settings` 配置 embedding）。
 

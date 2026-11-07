@@ -3,7 +3,7 @@
     <v-icon size="64" color="primary">mdi-map-search-outline</v-icon>
     <h1 class="not-found-title">404 · 页面不存在</h1>
     <p class="not-found-desc">链接可能已失效，或该资源不属于当前账号。</p>
-    <v-btn color="primary" to="/">返回总览</v-btn>
+    <v-btn color="primary" to="/" variant="tonal">返回总览</v-btn>
   </div>
 </template>
 

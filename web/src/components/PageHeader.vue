@@ -88,6 +88,10 @@ withDefaults(
   padding-inline: 0;
 }
 
+.page-header__actions :deep(.v-btn .v-icon) {
+  font-size: 18px;
+}
+
 @media (max-width: 599px) {
   .page-header__actions {
     width: 100%;

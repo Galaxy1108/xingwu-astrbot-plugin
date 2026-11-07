@@ -26,16 +26,14 @@
 
     <v-card v-else-if="admin.bots.length" class="table-card">
       <div class="table-scroll">
-        <v-table hover>
+        <v-table hover class="bots-table">
           <thead>
             <tr>
               <th>Bot</th>
               <th>归属用户</th>
               <th>平台</th>
               <th>状态</th>
-              <th>启用</th>
-              <th>绑定</th>
-              <th>创建时间</th>
+              <th class="nowrap">创建时间</th>
               <th class="text-right">操作</th>
             </tr>
           </thead>
@@ -47,13 +45,20 @@
               </td>
               <td>{{ bot.owner_email || '—' }}</td>
               <td>{{ platformShortLabel(bot.platform) }}</td>
-              <td><StatusChip :status="bot.status" /></td>
               <td>
-                <v-icon :color="bot.enabled ? 'success' : 'default'" size="18">
-                  {{ bot.enabled ? 'mdi-check-circle' : 'mdi-minus-circle-outline' }}
-                </v-icon>
+                <StatusChip :status="bot.status" />
+                <div class="bot-flags text-muted">
+                  <span :class="{ 'flag-on': bot.enabled }">
+                    <v-icon size="13">{{ bot.enabled ? 'mdi-check-circle' : 'mdi-minus-circle-outline' }}</v-icon>
+                    {{ bot.enabled ? '已启用' : '已停用' }}
+                  </span>
+                  <span class="flag-sep">·</span>
+                  <span :class="{ 'flag-on': bot.bound }">
+                    <v-icon size="13">{{ bot.bound ? 'mdi-link-variant' : 'mdi-link-off' }}</v-icon>
+                    {{ bot.bound ? '已绑定' : '未绑定' }}
+                  </span>
+                </div>
               </td>
-              <td>{{ bot.bound ? '已绑定' : '未绑定' }}</td>
               <td class="nowrap">{{ formatDateTime(bot.created_at) }}</td>
               <td class="text-right nowrap">
                 <v-btn
@@ -165,6 +170,35 @@ async function confirmDisable(): Promise<void> {
 
 .table-scroll {
   overflow-x: auto;
+}
+
+.bots-table {
+  min-width: 980px;
+}
+
+.bots-table :deep(th) {
+  white-space: nowrap;
+}
+
+.bot-flags {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 4px;
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+.bot-flags .v-icon {
+  margin-right: 2px;
+}
+
+.flag-on {
+  color: #2e7d32;
+}
+
+.flag-sep {
+  opacity: 0.5;
 }
 
 .bot-name {

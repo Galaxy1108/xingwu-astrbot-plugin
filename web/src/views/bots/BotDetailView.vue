@@ -164,7 +164,7 @@
           description="生成二维码后，请使用对应平台 App 扫码并在手机上确认；二维码有效期 60 秒，过期会自动刷新（最多 3 次）。"
         >
           <template #actions>
-            <v-btn color="primary" :loading="qrBusy" @click="startQr">生成二维码</v-btn>
+            <v-btn color="primary" :loading="qrBusy" @click="startQr" variant="tonal">生成二维码</v-btn>
           </template>
         </EmptyState>
       </v-card>
@@ -199,7 +199,7 @@
         <v-card-actions>
           <v-spacer />
           <v-btn variant="text" :disabled="renameSaving" @click="renameOpen = false">取消</v-btn>
-          <v-btn color="primary" :loading="renameSaving" @click="submitRename">保存</v-btn>
+          <v-btn color="primary" :loading="renameSaving" @click="submitRename" variant="tonal">保存</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

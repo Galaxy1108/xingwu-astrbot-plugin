@@ -14,6 +14,7 @@ vi.mock('@/api/admin', () => ({
   patchAdminBotMemory: vi.fn(),
   deleteAdminBotMemory: vi.fn(),
   exportAdminBotMemories: vi.fn(),
+  importAdminBotMemories: vi.fn(),
 }))
 
 import {
@@ -119,7 +120,7 @@ describe('AdminContentDrawer · 对话与记忆', () => {
 
     expect(wrapper.text()).toContain('本次访问会记录在案')
     expect(wrapper.text()).toContain('关于西湖的聊天')
-    expect(listConversations).toHaveBeenCalledWith('b_1')
+    expect(listConversations).toHaveBeenCalledWith('b_1', false)
 
     const messages = wrapper.findAll('[data-testid="admin-conversation-message"]')
     expect(messages).toHaveLength(2)
@@ -190,12 +191,16 @@ describe('AdminContentDrawer · 对话与记忆', () => {
     await flushPromises()
     await nextTick()
 
-    expect(listMemories).toHaveBeenCalledWith('b_1', {
-      page: 1,
-      page_size: 10,
-      q: undefined,
-      kind: undefined,
-    })
+    expect(listMemories).toHaveBeenCalledWith(
+      'b_1',
+      {
+        page: 1,
+        page_size: 10,
+        q: undefined,
+        kind: undefined,
+      },
+      false,
+    )
     expect(wrapper.text()).toContain('用户喜欢深夜聊天')
     expect(wrapper.findAll('[data-testid="admin-memory-row"]')).toHaveLength(1)
 
@@ -221,12 +226,68 @@ describe('AdminContentDrawer · 对话与记忆', () => {
     await wrapper.get('form.memory-filters').trigger('submit')
     await flushPromises()
 
-    expect(listMemories).toHaveBeenLastCalledWith('b_1', {
-      page: 1,
-      page_size: 10,
-      q: '西湖',
-      kind: undefined,
-    })
+    expect(listMemories).toHaveBeenLastCalledWith(
+      'b_1',
+      {
+        page: 1,
+        page_size: 10,
+        q: '西湖',
+        kind: undefined,
+      },
+      false,
+    )
+    wrapper.unmount()
+  })
+
+  it('加密用户返回 confirmation_required 时先确认，确认后带 confirm=1 重试并提示已记录', async () => {
+    listConversations
+      .mockRejectedValueOnce(
+        new ApiError({
+          status: 403,
+          code: 'confirmation_required',
+          message: '对方已启用加密，确定要查看吗？这将解密内容并记录本次访问（用户可见）。',
+        }),
+      )
+      .mockResolvedValueOnce({ items: [conversation], total: 1 })
+
+    const wrapper = mountDrawer()
+    await flushPromises()
+    await nextTick()
+
+    expect(wrapper.text()).toContain('查看加密内容？')
+    const confirm = wrapper.findAll('button').find((button) => button.text().includes('确认查看并记录'))
+    expect(confirm).toBeTruthy()
+    await confirm!.trigger('click')
+    await flushPromises()
+    await nextTick()
+
+    expect(listConversations).toHaveBeenLastCalledWith('b_1', true)
+    expect(wrapper.text()).toContain('该用户已开启加密，本次查看已记录')
+    expect(wrapper.text()).toContain('关于西湖的聊天')
+    wrapper.unmount()
+  })
+
+  it('取消加密内容查看时显示空态且不展示任何对话', async () => {
+    listConversations.mockRejectedValueOnce(
+      new ApiError({
+        status: 403,
+        code: 'confirmation_required',
+        message: '对方已启用加密，确定要查看吗？',
+      }),
+    )
+
+    const wrapper = mountDrawer()
+    await flushPromises()
+    await nextTick()
+
+    const cancel = wrapper.findAll('button').find((button) => button.text().trim() === '取消')
+    expect(cancel).toBeTruthy()
+    await cancel!.trigger('click')
+    await flushPromises()
+    await nextTick()
+
+    expect(wrapper.text()).toContain('未查看加密内容')
+    expect(wrapper.text()).not.toContain('关于西湖的聊天')
     wrapper.unmount()
   })
 })

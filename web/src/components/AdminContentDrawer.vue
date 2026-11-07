@@ -34,6 +34,18 @@
         本次访问会记录在案：操作人、Bot、时间与 IP 将写入访问审计。
       </v-alert>
 
+      <v-alert
+        v-if="encryptedNotice"
+        type="warning"
+        variant="tonal"
+        density="compact"
+        icon="mdi-lock-open-alert"
+        class="encrypted-alert"
+        data-testid="admin-content-encrypted-notice"
+      >
+        该用户已开启加密，本次查看已记录
+      </v-alert>
+
       <v-tabs v-model="activeTab" density="compact" class="content-tabs" color="primary">
         <v-tab value="conversations" data-testid="admin-content-tab-conversations">
           <v-icon start size="18">mdi-chat-processing-outline</v-icon>
@@ -64,6 +76,17 @@
             variant="table"
             :rows="6"
           />
+
+          <EmptyState
+            v-else-if="cancelled && !conversations.length"
+            icon="mdi-shield-lock-outline"
+            title="未查看加密内容"
+            description="你已取消查看。加密内容不会被解密或显示。"
+          >
+            <template #actions>
+              <v-btn color="primary" variant="tonal" @click="loadConversations(false)">重新查看</v-btn>
+            </template>
+          </EmptyState>
 
           <EmptyState
             v-else-if="!conversationsError && conversations.length === 0"
@@ -210,6 +233,14 @@
             </form>
             <v-btn
               variant="tonal"
+              prepend-icon="mdi-upload"
+              data-testid="admin-memory-import"
+              @click="openImport"
+            >
+              导入快照
+            </v-btn>
+            <v-btn
+              variant="tonal"
               prepend-icon="mdi-download"
               :loading="exporting"
               data-testid="admin-memory-export"
@@ -233,6 +264,17 @@
             variant="table"
             :rows="6"
           />
+
+          <EmptyState
+            v-else-if="cancelled && !memories.length"
+            icon="mdi-shield-lock-outline"
+            title="未查看加密内容"
+            description="你已取消查看。加密记忆不会被解密或显示。"
+          >
+            <template #actions>
+              <v-btn color="primary" variant="tonal" @click="loadMemories(1, false)">重新查看</v-btn>
+            </template>
+          </EmptyState>
 
           <EmptyState
             v-else-if="!memoryError && memories.length === 0"
@@ -378,7 +420,7 @@
         </div>
         <div class="editor-actions">
           <v-btn variant="text" :disabled="saving" @click="editorOpen = false">取消</v-btn>
-          <v-btn color="primary" :loading="saving" data-testid="admin-memory-save" @click="saveEditor">
+          <v-btn color="primary" :loading="saving" data-testid="admin-memory-save" @click="saveEditor" variant="tonal">
             保存
           </v-btn>
         </div>
@@ -399,11 +441,82 @@
     <ConfirmDialog
       v-model="exportConfirmOpen"
       title="导出该 Bot 的全部记忆？"
-      message="导出会生成包含全部记忆的 JSON 文件，并写入审计日志。单条查看请直接在列表中操作；请确认已获得数据授权。"
+      message="导出会生成包含全部记忆的 JSON 文件（含笔记），并写入审计日志。单条查看请直接在列表中操作；请确认已获得数据授权。"
       confirm-text="确认导出"
       :loading="exporting"
       @confirm="confirmExport"
       @cancel="exportConfirmOpen = false"
+    />
+
+    <v-dialog v-model="importOpen" max-width="560" persistent>
+      <v-card class="import-card">
+        <v-card-title class="import-title">导入 JSON 快照</v-card-title>
+        <v-card-text>
+          <v-alert type="info" variant="tonal" density="compact" class="mb-3">
+            快照包含记忆与笔记；导入按内容去重，可重复执行。加密用户需确认后才会解密导入。
+          </v-alert>
+          <v-alert v-if="importError" type="error" variant="tonal" density="compact" class="mb-3">
+            {{ importError }}
+          </v-alert>
+          <v-file-input
+            v-model="importFile"
+            label="选择 JSON 快照"
+            accept=".json,application/json"
+            prepend-icon="mdi-paperclip"
+            density="compact"
+            show-size
+            class="mb-2"
+            @update:model-value="onImportFileChange"
+          />
+          <v-checkbox
+            v-model="importDryRun"
+            label="仅预检（dry-run，不写入）"
+            density="compact"
+            hide-details
+          />
+          <v-alert
+            v-if="importReport"
+            :type="importReport.dry_run ? 'info' : 'success'"
+            variant="tonal"
+            density="compact"
+            class="mt-3"
+            data-testid="admin-memory-import-report"
+          >
+            <div>
+              记忆：导入 {{ importReport.memories.imported }} · 跳过 {{ importReport.memories.skipped }} ·
+              失败 {{ importReport.memories.failed }}
+            </div>
+            <div>
+              笔记：导入 {{ importReport.notes.imported }} · 跳过 {{ importReport.notes.skipped }} ·
+              失败 {{ importReport.notes.failed }}
+            </div>
+            <div v-if="importReport.dry_run" class="mt-1">当前为预检结果，未写入任何数据。</div>
+          </v-alert>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" :disabled="importing" @click="importOpen = false">关闭</v-btn>
+          <v-btn
+            color="primary"
+            variant="tonal"
+            :loading="importing"
+            data-testid="admin-memory-import-submit"
+            @click="submitImport()"
+          >
+            开始导入
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <ConfirmDialog
+      v-model="confirmationOpen"
+      title="查看加密内容？"
+      :message="confirmationMessage"
+      confirm-text="确认查看并记录"
+      danger
+      @confirm="confirmContentAccess"
+      @cancel="cancelContentAccess"
     />
   </v-navigation-drawer>
 </template>
@@ -416,12 +529,14 @@ import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useUiStore } from '@/stores/ui'
 import { useMemoryKindMeta } from '@/composables/useMemoryKindMeta'
+import { isApiError } from '@/api/client'
 import { downloadJson } from '@/utils/download'
 import { errorMessage } from '@/utils/errors'
 import { formatDateTime, truncate } from '@/utils/format'
 import {
   deleteAdminBotMemory,
   exportAdminBotMemories,
+  importAdminBotMemories,
   listAdminBotConversations,
   listAdminBotMemories,
   patchAdminBotMemory,
@@ -430,6 +545,7 @@ import type {
   AdminContentTarget,
   AdminConversation,
   ConversationMessage,
+  MemoryImportReport,
   MemoryItem,
   MemoryKind,
   MemoryPatch,
@@ -456,6 +572,46 @@ const botId = computed(() => props.bot?.id ?? '')
 
 /* ------------------------------------------------------------ tabs */
 const activeTab = ref<'conversations' | 'memories'>('conversations')
+
+/* ------------------------------------------------ encrypted confirmation */
+const contentConfirmed = ref(false)
+const confirmationOpen = ref(false)
+const confirmationMessage = ref('')
+const cancelled = ref(false)
+const encryptedNotice = ref(false)
+let pendingRetry: (() => Promise<void>) | null = null
+
+function isConfirmationRequired(error: unknown): boolean {
+  return isApiError(error) && error.code === 'confirmation_required'
+}
+
+function requestContentConfirmation(message: string, retry: () => Promise<void>): void {
+  confirmationMessage.value =
+    message ||
+    '对方已启用加密，确定要查看吗？这将解密内容并记录本次访问（用户可见）。'
+  pendingRetry = retry
+  confirmationOpen.value = true
+}
+
+async function confirmContentAccess(): Promise<void> {
+  contentConfirmed.value = true
+  encryptedNotice.value = true
+  cancelled.value = false
+  confirmationOpen.value = false
+  const retry = pendingRetry
+  pendingRetry = null
+  if (retry) await retry()
+}
+
+function cancelContentAccess(): void {
+  confirmationOpen.value = false
+  pendingRetry = null
+  cancelled.value = true
+  conversations.value = []
+  memories.value = []
+  conversationsError.value = ''
+  memoryError.value = ''
+}
 
 /* ------------------------------------------------------ conversations */
 const conversations = ref<AdminConversation[]>([])
@@ -497,13 +653,17 @@ function conversationTitle(conversation: AdminConversation): string {
   return `${platform}会话 ${conversation.id.slice(0, 8)}`
 }
 
-async function loadConversations(): Promise<void> {
+async function loadConversations(confirm = contentConfirmed.value): Promise<void> {
   if (!botId.value) return
   conversationsLoading.value = true
   conversationsError.value = ''
+  cancelled.value = false
   try {
-    const result = await listAdminBotConversations(botId.value)
+    const result = await listAdminBotConversations(botId.value, confirm)
     conversations.value = result.items ?? []
+    if (confirm && conversations.value.some((item) => item.encrypted)) {
+      encryptedNotice.value = true
+    }
     if (
       activeConversationId.value &&
       !conversations.value.some((item) => item.id === activeConversationId.value)
@@ -514,6 +674,11 @@ async function loadConversations(): Promise<void> {
       activeConversationId.value = conversations.value[0].id
     }
   } catch (error) {
+    if (isConfirmationRequired(error)) {
+      cancelled.value = false
+      requestContentConfirmation(errorMessage(error), () => loadConversations(true))
+      return
+    }
     conversationsError.value = errorMessage(error, '加载对话失败')
   } finally {
     conversationsLoading.value = false
@@ -552,23 +717,33 @@ const memoryPageCount = computed(() =>
   Math.max(1, Math.ceil(memoryTotal.value / Math.max(1, memoryPageSize.value))),
 )
 
-async function loadMemories(page = 1): Promise<void> {
+async function loadMemories(page = 1, confirm = contentConfirmed.value): Promise<void> {
   if (!botId.value) return
   memoryLoading.value = true
   memoryError.value = ''
+  cancelled.value = false
   try {
-    const result = await listAdminBotMemories(botId.value, {
-      page,
-      page_size: memoryPageSize.value,
-      q: memoryFilters.q || undefined,
-      kind: memoryFilters.kind || undefined,
-    })
+    const result = await listAdminBotMemories(
+      botId.value,
+      {
+        page,
+        page_size: memoryPageSize.value,
+        q: memoryFilters.q || undefined,
+        kind: memoryFilters.kind || undefined,
+      },
+      confirm,
+    )
     memories.value = result.items ?? []
     memoryTotal.value = result.total ?? 0
     memoryPage.value = result.page ?? page
     memoryPageSize.value = result.page_size ?? memoryPageSize.value
     memoryLoaded.value = true
   } catch (error) {
+    if (isConfirmationRequired(error)) {
+      cancelled.value = false
+      requestContentConfirmation(errorMessage(error), () => loadMemories(page, true))
+      return
+    }
     memoryError.value = errorMessage(error, '加载记忆失败')
   } finally {
     memoryLoading.value = false
@@ -660,11 +835,17 @@ async function saveEditor(): Promise<void> {
 
   saving.value = true
   try {
-    await patchAdminBotMemory(botId.value, editingId.value, payload)
+    await patchAdminBotMemory(botId.value, editingId.value, payload, contentConfirmed.value)
     editorOpen.value = false
     ui.notify('记忆已保存', 'success')
     await loadMemories(memoryPage.value)
   } catch (error) {
+    if (isConfirmationRequired(error)) {
+      requestContentConfirmation(errorMessage(error), async () => {
+        await saveEditor()
+      })
+      return
+    }
     editorError.value = errorMessage(error, '保存记忆失败')
   } finally {
     saving.value = false
@@ -685,13 +866,20 @@ async function confirmDelete(): Promise<void> {
   if (!botId.value || !deleteTarget.value) return
   deleting.value = true
   try {
-    await deleteAdminBotMemory(botId.value, deleteTarget.value.id)
+    await deleteAdminBotMemory(botId.value, deleteTarget.value.id, contentConfirmed.value)
     deleteOpen.value = false
     ui.notify('记忆已删除', 'success')
     const targetPage =
       memories.value.length === 1 && memoryPage.value > 1 ? memoryPage.value - 1 : memoryPage.value
     await loadMemories(targetPage)
   } catch (error) {
+    if (isConfirmationRequired(error)) {
+      deleteOpen.value = false
+      requestContentConfirmation(errorMessage(error), async () => {
+        await confirmDelete()
+      })
+      return
+    }
     deleteOpen.value = false
     ui.notifyError(errorMessage(error, '删除记忆失败'))
   } finally {
@@ -699,24 +887,113 @@ async function confirmDelete(): Promise<void> {
   }
 }
 
-/* ------------------------------------------------------------- export */
+/* ------------------------------------------------------------- export / import */
 const exportConfirmOpen = ref(false)
 const exporting = ref(false)
 
+const importOpen = ref(false)
+const importFile = ref<File | File[] | null>(null)
+const importDryRun = ref(false)
+const importing = ref(false)
+const importError = ref('')
+const importReport = ref<MemoryImportReport | null>(null)
+let pendingSnapshot: Record<string, unknown> | null = null
+
 async function confirmExport(): Promise<void> {
+  exportConfirmOpen.value = false
+  await runExport(contentConfirmed.value)
+}
+
+async function runExport(confirm: boolean): Promise<void> {
   if (!botId.value) return
   exporting.value = true
   try {
-    const result = await exportAdminBotMemories(botId.value)
+    const result = await exportAdminBotMemories(botId.value, confirm)
     downloadJson(`memories-${botId.value}-admin.json`, result)
-    exportConfirmOpen.value = false
-    ui.notify(`已导出 ${result.count} 条记忆（已记录审计）`, 'success')
+    ui.notify(`已导出 ${result.count} 条记忆（含笔记，已记录审计）`, 'success')
     await loadMemories(memoryPage.value)
   } catch (error) {
-    exportConfirmOpen.value = false
+    if (isConfirmationRequired(error)) {
+      requestContentConfirmation(errorMessage(error), async () => {
+        await runExport(true)
+      })
+      return
+    }
     ui.notifyError(errorMessage(error, '导出记忆失败'))
   } finally {
     exporting.value = false
+  }
+}
+
+function openImport(): void {
+  importFile.value = null
+  importDryRun.value = false
+  importError.value = ''
+  importReport.value = null
+  pendingSnapshot = null
+  importOpen.value = true
+}
+
+function onImportFileChange(): void {
+  pendingSnapshot = null
+  importReport.value = null
+  importError.value = ''
+}
+
+function pickedFile(): File | null {
+  const value = importFile.value
+  if (Array.isArray(value)) return value[0] ?? null
+  return value
+}
+
+async function submitImport(confirm = contentConfirmed.value): Promise<void> {
+  if (!botId.value) return
+  importError.value = ''
+  if (!pendingSnapshot) {
+    const file = pickedFile()
+    if (!file) {
+      importError.value = '请选择 JSON 快照文件'
+      return
+    }
+    try {
+      const parsed = JSON.parse(await file.text()) as unknown
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        importError.value = '快照必须是 JSON 对象'
+        return
+      }
+      pendingSnapshot = parsed as Record<string, unknown>
+    } catch {
+      importError.value = '文件不是合法的 JSON'
+      return
+    }
+  }
+
+  importing.value = true
+  try {
+    const report = await importAdminBotMemories(
+      botId.value,
+      pendingSnapshot,
+      importDryRun.value,
+      confirm,
+    )
+    importReport.value = report
+    ui.notify(
+      report.dry_run
+        ? `预检完成：记忆 ${report.memories.imported} 条、笔记 ${report.notes.imported} 条（未写入）`
+        : `导入完成：记忆 ${report.memories.imported} 条、笔记 ${report.notes.imported} 条`,
+      'success',
+    )
+    if (!report.dry_run) await loadMemories(memoryPage.value)
+  } catch (error) {
+    if (isConfirmationRequired(error)) {
+      requestContentConfirmation(errorMessage(error), async () => {
+        await submitImport(true)
+      })
+      return
+    }
+    importError.value = errorMessage(error, '导入快照失败')
+  } finally {
+    importing.value = false
   }
 }
 
@@ -727,6 +1004,19 @@ function close(): void {
 
 function resetState(): void {
   activeTab.value = 'conversations'
+  contentConfirmed.value = false
+  confirmationOpen.value = false
+  confirmationMessage.value = ''
+  cancelled.value = false
+  encryptedNotice.value = false
+  pendingRetry = null
+  importOpen.value = false
+  importFile.value = null
+  importDryRun.value = false
+  importing.value = false
+  importError.value = ''
+  importReport.value = null
+  pendingSnapshot = null
   conversations.value = []
   conversationsError.value = ''
   activeConversationId.value = ''
@@ -803,7 +1093,8 @@ watch(activeTab, (tab) => {
   line-height: 1.5;
 }
 
-.access-alert {
+.access-alert,
+.encrypted-alert {
   flex: 0 0 auto;
   margin: 2px 20px 8px;
   font-size: 12px;
@@ -1139,6 +1430,16 @@ watch(activeTab, (tab) => {
 .editor-hint {
   font-size: 0.74rem;
   line-height: 1.55;
+}
+
+.import-card {
+  padding: 8px;
+}
+
+.import-title {
+  font-size: 1.05rem;
+  font-weight: 650;
+  padding: 12px 20px 0;
 }
 
 .editor-actions {

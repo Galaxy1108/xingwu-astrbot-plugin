@@ -44,7 +44,7 @@
     </v-row>
 
     <v-row class="mt-1">
-      <v-col cols="12" md="8">
+      <v-col cols="12">
         <v-card elevation="0" class="pa-5 h-100">
           <div class="chart-head">
             <div>
@@ -80,35 +80,6 @@
         </v-card>
       </v-col>
 
-      <v-col cols="12" md="4">
-        <v-card elevation="0" class="pa-5 h-100 quota-card">
-          <div class="text-subtitle-1 font-weight-bold mb-3">Bot 配额</div>
-          <div class="quota-ring">
-            <v-progress-circular :model-value="quotaPercent" :size="124" :width="10" color="primary">
-              <div class="text-center">
-                <div class="quota-percent">{{ quotaPercent }}%</div>
-                <div class="text-caption muted">已使用</div>
-              </div>
-            </v-progress-circular>
-          </div>
-          <div class="quota-line">
-            <span class="muted">当前余额</span>
-            <span class="font-weight-bold">{{ formatNumber(wallet?.balance ?? 0) }} 点</span>
-          </div>
-          <div class="quota-line">
-            <span class="muted">近 30 天消耗</span>
-            <span>{{ formatNumber(daily?.total_points ?? 0) }} 点</span>
-          </div>
-          <div class="quota-line">
-            <span class="muted">Bot 名额</span>
-            <span>{{ bots.items.length }} / {{ auth.limits?.max_bots ?? '—' }}</span>
-          </div>
-          <v-spacer />
-          <v-btn block color="primary" variant="flat" prepend-icon="mdi-wallet-outline" to="/billing" class="mt-4">
-            查看额度与账单
-          </v-btn>
-        </v-card>
-      </v-col>
     </v-row>
 
     <v-card elevation="0" class="mt-4">
@@ -182,12 +153,6 @@ const botOptions = computed(() => [
   { title: '全部 Bot', value: '' },
   ...byBot.value.map((item) => ({ title: item.bot_name || item.bot_id, value: item.bot_id })),
 ])
-
-const quotaPercent = computed(() => {
-  const max = auth.limits?.max_bots ?? 0
-  if (!max) return 0
-  return Math.min(100, Math.round((bots.items.length / max) * 100))
-})
 
 const stats = computed(() => [
   {
@@ -361,29 +326,6 @@ function signedNumber(value?: number): string {
   flex-wrap: wrap;
   gap: 16px;
   margin-top: 6px;
-}
-
-.quota-card {
-  display: flex;
-  flex-direction: column;
-}
-
-.quota-ring {
-  display: flex;
-  justify-content: center;
-  padding: 4px 0 14px;
-}
-
-.quota-percent {
-  font-size: 1.35rem;
-  font-weight: 700;
-}
-
-.quota-line {
-  display: flex;
-  justify-content: space-between;
-  font-size: 13px;
-  padding: 2px 0;
 }
 
 .section-head {

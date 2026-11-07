@@ -1,6 +1,7 @@
 import { api } from './client'
 import type {
   MemoryExportResult,
+  MemoryImportReport,
   MemoryItem,
   MemoryListQuery,
   MemoryPatch,
@@ -57,5 +58,17 @@ export function searchMemories(
 export function exportMemories(botId: string): Promise<MemoryExportResult> {
   return api.post<MemoryExportResult>(
     `/bots/${encodeURIComponent(botId)}/memories/export`,
+  )
+}
+
+/** 导入 JSON 快照（memories + notes）；dryRun 仅预检不写入。 */
+export function importMemories(
+  botId: string,
+  snapshot: Record<string, unknown>,
+  dryRun = false,
+): Promise<MemoryImportReport> {
+  return api.post<MemoryImportReport>(
+    `/bots/${encodeURIComponent(botId)}/memories/import`,
+    { snapshot, dry_run: dryRun },
   )
 }
