@@ -228,7 +228,7 @@ async def version(request: web.Request) -> web.Response:
         {
             "version": settings.version,
             "dev_mode": bool(settings.dev_mode),
-            "build": "0.3.0-m1+m2+m3slice",
+            "build": "0.4.0-m1-to-m4",
         }
     )
 
