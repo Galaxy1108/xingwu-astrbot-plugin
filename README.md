@@ -114,3 +114,11 @@ saas/
 ## 许可
 
 AstrBot 本体为 AGPL-3.0；本插件建议与生态一致使用 AGPL-3.0（对外提供 SaaS 前请确认第 13 条源码提供义务与合规要求）。
+
+
+## 许可证与上游
+
+本项目是 **AstrBot** 的深度集成插件（同进程加载、继承 Star、运行时接管 ConversationManager 等），
+按 AGPL-3.0-or-later 发布，见 [LICENSE](LICENSE)。上游 AstrBot：https://github.com/AstrBotDevs/AstrBot
+
+若部署为公开网络服务，请遵守 AGPL 第 13 条，向用户提供对应源代码。
