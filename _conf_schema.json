@@ -99,5 +99,11 @@
     "description": "使用 SSL（465 端口）",
     "type": "bool",
     "default": false
+  },
+  "astrbot_dashboard_url": {
+    "description": "AstrBot Dashboard 地址（管理端「进入 AstrBot 后台」按钮）",
+    "type": "string",
+    "default": "http://127.0.0.1:6185",
+    "hint": "默认本机 Dashboard；生产填反向代理后的 HTTPS 地址。"
   }
 }
