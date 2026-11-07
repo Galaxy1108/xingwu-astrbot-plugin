@@ -21,10 +21,33 @@ logger = logging.getLogger(__name__)
 PUBLIC_PATHS = {
     "/api/auth/otp/request",
     "/api/auth/otp/verify",
+    "/api/auth/password/register",
+    "/api/auth/password/login",
+    "/api/auth/password/reset/request",
+    "/api/auth/password/reset",
+    "/api/auth/oauth/providers",
     "/api/version",
     "/healthz",
 }
+# Read-only public share links (e.g. /api/public/conversations/<token>) plus
+# OAuth start/callback (dynamic provider segment).  Bind mode still requires a
+# session inside the route itself.
+PUBLIC_PREFIXES = ("/api/public/", "/api/auth/oauth/")
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+def is_public_path(path: str) -> bool:
+    return path in PUBLIC_PATHS or path.startswith(PUBLIC_PREFIXES)
+
+# A banned user keeps a session to read the ban notice and submit an appeal.
+# Everything else under /api answers 403 ``account_banned``.
+BANNED_ALLOWED_PATHS = {
+    "/api/me",
+    "/api/me/appeals",
+    "/api/appeals",
+    "/api/auth/logout",
+    "/api/version",
+}
 
 
 # --------------------------------------------------------------------------
@@ -92,9 +115,20 @@ async def session_middleware(request: web.Request, handler):
     resolved = container_of(request).sessions.resolve(token)
     if resolved is not None:
         request["user"], request["session"] = resolved
-    if request.path.startswith("/api") and request.path not in PUBLIC_PATHS:
-        if request.get("user") is None:
+    user = request.get("user")
+    is_public = is_public_path(request.path)
+    if request.path.startswith("/api") and not is_public:
+        if user is None:
             return fail(Unauthorized("登录已失效，请重新登录"))
+        if user.get("status") == "disabled" and request.path not in BANNED_ALLOWED_PATHS:
+            return fail(
+                AppError(
+                    "账号已被禁用，仅可查看封禁通知与提交申诉",
+                    code="account_banned",
+                    status=403,
+                    extra={"reason": user.get("status_reason") or ""},
+                )
+            )
     return await handler(request)
 
 
@@ -102,7 +136,7 @@ async def session_middleware(request: web.Request, handler):
 async def csrf_middleware(request: web.Request, handler):
     if request.method not in UNSAFE_METHODS:
         return await handler(request)
-    if request.path in PUBLIC_PATHS:
+    if is_public_path(request.path):
         return await handler(request)
     user = request.get("user")
     if user is None:
@@ -244,6 +278,8 @@ def create_app(container: Container) -> web.Application:
         "routes_memory_settings",
         "routes_memory_notes",
         "routes_models",
+        "routes_qr_sessions",
+        "routes_conversations",
     ):
         try:
             module = import_module(f".{module_name}", __package__)

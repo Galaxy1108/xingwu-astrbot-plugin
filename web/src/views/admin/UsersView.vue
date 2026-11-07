@@ -1,6 +1,6 @@
 <template>
   <div>
-    <PageHeader title="用户管理" description="查看用户状态、配额与加密状态；禁用会立即撤销会话并停用其全部 Bot。">
+    <PageHeader title="用户管理" description="查看用户状态、配额与加密状态；封禁会立即撤销会话并停用其全部 Bot。">
       <template #actions>
         <v-btn variant="text" prepend-icon="mdi-refresh" :loading="admin.usersLoading" @click="reload">
           刷新
@@ -42,7 +42,7 @@
       <StatCard
         label="已用 Token"
         :value="overview?.tokens_metered ? formatNumber(overview.tokens_used) : '—'"
-        :hint="overview?.tokens_metered ? '来自 AstrBot 用量统计' : '尚未接入用量计量（M4）'"
+        :hint="overview?.tokens_metered ? '来自后端调用统计' : '尚未接入用量计量（M4）'"
         icon="mdi-chart-timeline-variant"
         color="info"
         :loading="admin.overviewLoading"
@@ -105,7 +105,13 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="user in admin.users" :key="user.id">
+            <tr
+              v-for="user in admin.users"
+              :key="user.id"
+              class="clickable-row"
+              data-testid="admin-user-row"
+              @click="openDetail(user)"
+            >
               <td class="user-cell">
                 <div class="user-name-row">
                   <span class="user-name" :title="user.display_name || user.email">
@@ -124,7 +130,25 @@
                 <div class="user-email" :title="user.email">{{ user.email }}</div>
                 <div class="text-mono text-muted user-id">{{ user.id }}</div>
               </td>
-              <td><StatusChip :status="user.status" kind="user" /></td>
+              <td class="status-cell">
+                <StatusChip :status="user.status" kind="user" />
+                <v-chip
+                  v-if="user.pending_appeal"
+                  size="x-small"
+                  variant="tonal"
+                  color="warning"
+                  class="appeal-chip"
+                >
+                  有申诉
+                </v-chip>
+                <div
+                  v-if="user.status_reason"
+                  class="status-reason text-muted"
+                  :title="user.status_reason"
+                >
+                  {{ user.status_reason }}
+                </div>
+              </td>
               <td class="nowrap quota-cell">
                 {{ user.bot_count ?? '—' }} / {{ user.quota?.max_bots ?? '—' }}
                 <span class="text-muted quota-token">Token {{ formatNumber(user.quota?.monthly_tokens) }}</span>
@@ -143,22 +167,23 @@
               </td>
               <td class="nowrap">{{ formatDateTime(user.created_at) }}</td>
               <td class="text-right nowrap">
-                <v-btn size="small" variant="text" @click="showQuota(user)">配额</v-btn>
+                <v-btn size="small" variant="text" @click.stop="openDetail(user)">详情</v-btn>
+                <v-btn size="small" variant="text" @click.stop="showQuota(user)">配额</v-btn>
                 <v-btn
                   v-if="user.status === 'active'"
                   size="small"
                   variant="text"
                   color="error"
-                  @click="askToggle(user, 'disabled')"
+                  @click.stop="askToggle(user, 'disabled')"
                 >
-                  禁用
+                  封禁
                 </v-btn>
                 <v-btn
                   v-else
                   size="small"
                   variant="text"
                   color="success"
-                  @click="askToggle(user, 'active')"
+                  @click.stop="askToggle(user, 'active')"
                 >
                   启用
                 </v-btn>
@@ -191,33 +216,84 @@
               {{ quotaUser?.email }}
             </div>
           </div>
-          <dl class="quota-list">
-            <div><dt>Bot 上限</dt><dd>{{ quotaUser?.quota?.max_bots ?? '—' }}</dd></div>
-            <div><dt>记忆条数上限</dt><dd>{{ formatNumber(quotaUser?.quota?.max_memories) }}</dd></div>
-            <div><dt>每月 Token</dt><dd>{{ formatNumber(quotaUser?.quota?.monthly_tokens) }}</dd></div>
-            <div><dt>当前 Bot 数</dt><dd>{{ quotaUser?.bot_count ?? '—' }}</dd></div>
-            <div><dt>余额</dt><dd>{{ formatNumber(quotaUser?.balance) }}</dd></div>
-          </dl>
+          <v-alert v-if="quotaError" type="error" variant="tonal" density="compact" class="mb-3">
+            {{ quotaError }}
+          </v-alert>
+          <div class="quota-form mt-4">
+            <v-text-field
+              v-model.number="quotaForm.max_bots"
+              label="Bot 上限"
+              type="number"
+              min="0"
+              variant="outlined"
+              density="compact"
+              hide-details
+            />
+            <v-text-field
+              v-model.number="quotaForm.max_memories"
+              label="记忆条数上限"
+              type="number"
+              min="0"
+              variant="outlined"
+              density="compact"
+              hide-details
+            />
+            <v-text-field
+              v-model.number="quotaForm.monthly_tokens"
+              label="每月 Token"
+              type="number"
+              min="0"
+              variant="outlined"
+              density="compact"
+              hide-details
+            />
+          </div>
+          <div class="quota-used mt-4">
+            <span>当前 Bot 数 <strong>{{ quotaUser?.bot_count ?? '—' }}</strong></span>
+            <span>已用 Token <strong>{{ formatNumber(quotaUser?.quota?.used_tokens) }}</strong></span>
+            <span>余额 <strong>{{ formatNumber(quotaUser?.balance) }}</strong> 点</span>
+          </div>
           <p class="text-muted quota-note">
-            配额修改接口已支持（PATCH /api/admin/users/{id}）；本页暂只读展示。
+            修改后立即生效；已有 Bot/记忆不会被删除。Token 为每月用量上限，仅累计不强制拦截。
           </p>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="quotaOpen = false">关闭</v-btn>
+          <v-btn variant="text" :disabled="quotaSaving" @click="quotaOpen = false">取消</v-btn>
+          <v-btn color="primary" variant="tonal" :loading="quotaSaving" @click="saveQuota">
+            保存配额
+          </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
+    <AdminUserDrawer
+      v-model="detailOpen"
+      :user="detailUser"
+      @updated="onDetailUpdated"
+    />
+
+    <ReasonDialog
+      v-model="banOpen"
+      :title="`封禁「${banTarget?.display_name || banTarget?.email || ''}」？`"
+      message="封禁会立即撤销该用户的全部会话并停用其全部 Bot，必须填写原因（会展示给用户并写入审计）。"
+      label="封禁原因"
+      confirm-text="确认封禁"
+      danger
+      :loading="banning"
+      @confirm="confirmBan"
+      @cancel="banOpen = false"
+    />
+
     <ConfirmDialog
       v-model="toggleOpen"
-      :title="toggleTarget?.status === 'active' ? '禁用该用户？' : '启用该用户？'"
+      :title="toggleTarget?.status === 'active' ? '封禁该用户？' : '解除封禁？'"
       :message="
         toggleTarget?.status === 'active'
-          ? '禁用会立即撤销该用户的全部会话，并停用其全部 Bot；该操作会写入审计日志。'
-          : '启用后该用户可以重新登录；其 Bot 不会自动启用。'
+          ? '封禁会立即撤销该用户的全部会话，并停用其全部 Bot；该操作会写入审计日志。'
+          : '解禁后该用户可以重新登录；其 Bot 不会自动启用。'
       "
-      :confirm-text="toggleTarget?.status === 'active' ? '禁用用户' : '启用用户'"
+      :confirm-text="toggleTarget?.status === 'active' ? '封禁用户' : '解除封禁'"
       :danger="toggleTarget?.status === 'active'"
       :loading="toggling"
       @confirm="confirmToggle"
@@ -227,7 +303,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusChip from '@/components/StatusChip.vue'
@@ -235,11 +311,13 @@ import StatCard from '@/components/StatCard.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import ReasonDialog from '@/components/ReasonDialog.vue'
+import AdminUserDrawer from '@/components/AdminUserDrawer.vue'
 import { useAdminStore } from '@/stores/admin'
 import { useUiStore } from '@/stores/ui'
 import { errorMessage } from '@/utils/errors'
 import { formatDateTime, formatNumber } from '@/utils/format'
-import type { AdminUser } from '@/types'
+import type { AdminUser, Quota } from '@/types'
 
 const admin = useAdminStore()
 const ui = useUiStore()
@@ -254,15 +332,25 @@ const currentPage = ref(1)
 const statusOptions = [
   { title: '全部状态', value: '' },
   { title: '正常', value: 'active' },
-  { title: '已禁用', value: 'disabled' },
+  { title: '已封禁', value: 'disabled' },
 ]
 
 const quotaOpen = ref(false)
 const quotaUser = ref<AdminUser | null>(null)
+const quotaSaving = ref(false)
+const quotaError = ref('')
+const quotaForm = reactive<Quota>({ max_bots: 0, max_memories: 0, monthly_tokens: 0 })
 
 const toggleOpen = ref(false)
 const toggleTarget = ref<AdminUser | null>(null)
 const toggling = ref(false)
+
+const detailOpen = ref(false)
+const detailUser = ref<AdminUser | null>(null)
+
+const banOpen = ref(false)
+const banTarget = ref<AdminUser | null>(null)
+const banning = ref(false)
 
 const pageCount = computed(() =>
   Math.max(1, Math.ceil(admin.usersTotal / Math.max(1, admin.usersPageSize))),
@@ -327,14 +415,80 @@ async function onPage(page: number): Promise<void> {
   await router.replace({ query: { ...route.query, page: String(page) } })
 }
 
+function openDetail(user: AdminUser): void {
+  detailUser.value = user
+  detailOpen.value = true
+}
+
+async function onDetailUpdated(): Promise<void> {
+  await load()
+}
+
 function showQuota(user: AdminUser): void {
   quotaUser.value = user
+  quotaForm.max_bots = Number(user.quota?.max_bots ?? 0)
+  quotaForm.max_memories = Number(user.quota?.max_memories ?? 0)
+  quotaForm.monthly_tokens = Number(user.quota?.monthly_tokens ?? 0)
+  quotaError.value = ''
   quotaOpen.value = true
 }
 
+async function saveQuota(): Promise<void> {
+  if (!quotaUser.value) return
+  quotaError.value = ''
+  const values: Array<[keyof Quota, string]> = [
+    ['max_bots', 'Bot 上限'],
+    ['max_memories', '记忆条数上限'],
+    ['monthly_tokens', '每月 Token'],
+  ]
+  for (const [key, label] of values) {
+    const value = Number(quotaForm[key])
+    if (!Number.isInteger(value) || value < 0) {
+      quotaError.value = `${label}必须是非负整数`
+      return
+    }
+  }
+  quotaSaving.value = true
+  try {
+    const updated = await admin.updateUserQuota(quotaUser.value.id, {
+      max_bots: Number(quotaForm.max_bots),
+      max_memories: Number(quotaForm.max_memories),
+      monthly_tokens: Number(quotaForm.monthly_tokens),
+    })
+    quotaUser.value = updated
+    quotaOpen.value = false
+    ui.notify('配额已更新', 'success')
+    await load()
+  } catch (error) {
+    quotaError.value = errorMessage(error, '保存配额失败')
+  } finally {
+    quotaSaving.value = false
+  }
+}
+
 function askToggle(user: AdminUser, target: 'active' | 'disabled'): void {
-  toggleTarget.value = target === 'disabled' ? user : { ...user, status: 'disabled' }
+  if (target === 'disabled') {
+    banTarget.value = user
+    banOpen.value = true
+    return
+  }
+  toggleTarget.value = { ...user, status: 'disabled' }
   toggleOpen.value = true
+}
+
+async function confirmBan(reason: string): Promise<void> {
+  if (!banTarget.value) return
+  banning.value = true
+  try {
+    await admin.setUserStatus(banTarget.value.id, 'disabled', reason)
+    banOpen.value = false
+    ui.notify('用户已封禁', 'success')
+    await load()
+  } catch (error) {
+    ui.notifyError(errorMessage(error, '封禁用户失败'))
+  } finally {
+    banning.value = false
+  }
 }
 
 async function confirmToggle(): Promise<void> {
@@ -344,7 +498,7 @@ async function confirmToggle(): Promise<void> {
   try {
     await admin.setUserStatus(toggleTarget.value.id, nextStatus)
     toggleOpen.value = false
-    ui.notify(nextStatus === 'disabled' ? '用户已禁用' : '用户已启用', 'success')
+    ui.notify(nextStatus === 'disabled' ? '用户已封禁' : '用户已解禁', 'success')
   } catch (error) {
     toggleOpen.value = false
     ui.notifyError(errorMessage(error, '更新用户状态失败'))
@@ -385,6 +539,31 @@ async function confirmToggle(): Promise<void> {
 
 .users-table {
   min-width: 1080px;
+}
+
+.clickable-row {
+  cursor: pointer;
+}
+
+.status-cell {
+  min-width: 150px;
+}
+
+.appeal-chip {
+  margin-top: 4px;
+}
+
+.status-reason {
+  margin-top: 4px;
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.7rem;
+}
+
+.clickable-row:hover {
+  background: rgba(60, 150, 202, 0.06);
 }
 
 .user-cell {
@@ -523,9 +702,37 @@ async function confirmToggle(): Promise<void> {
   margin: 0;
 }
 
+.quota-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.quota-used {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--console-surface-variant);
+  color: var(--console-text-muted);
+  font-size: 12.5px;
+}
+
+.quota-used strong {
+  color: var(--console-text);
+  font-weight: 600;
+}
+
 .quota-note {
   margin: 12px 0 0;
   font-size: 0.76rem;
   line-height: 1.6;
+}
+
+@media (max-width: 599px) {
+  .quota-form {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

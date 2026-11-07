@@ -6,6 +6,8 @@ from typing import Any
 
 from aiohttp import web
 
+from ..appeals import appeals_of
+from ..bans import bans_of
 from ..errors import AppError, Forbidden, ValidationError
 from .app import client_ip, container_of, current_user, ok
 
@@ -137,6 +139,29 @@ async def admin_list_users(request: web.Request) -> web.Response:
                 "quota": container.auth.quota_for(row["id"]),
             }
         )
+    # Batch-load pending appeals so the list can show the「有申诉」chip without N+1.
+    user_ids = [item["id"] for item in items]
+    pending_map: dict[str, Any] = {}
+    appeal_count: dict[str, int] = {}
+    if user_ids:
+        placeholders = ",".join("?" for _ in user_ids)
+        for appeal_row in container.db.query(
+            f"SELECT * FROM appeals WHERE status = 'pending' "
+            f"AND user_id IN ({placeholders}) ORDER BY created_at DESC, rowid DESC",
+            user_ids,
+        ):
+            pending_map.setdefault(
+                appeal_row["user_id"], appeals_of(container).serialize(appeal_row)
+            )
+        for count_row in container.db.query(
+            f"SELECT user_id, COUNT(*) AS c FROM appeals "
+            f"WHERE user_id IN ({placeholders}) GROUP BY user_id",
+            user_ids,
+        ):
+            appeal_count[count_row["user_id"]] = int(count_row["c"] or 0)
+    for item in items:
+        item["pending_appeal"] = pending_map.get(item["id"])
+        item["appeal_count"] = appeal_count.get(item["id"], 0)
     return ok({"items": items, "total": total, "page": page, "page_size": page_size})
 
 
@@ -147,14 +172,24 @@ async def admin_patch_user(request: web.Request) -> web.Response:
     container = container_of(request)
     user_id = request.match_info["user_id"]
     if "status" in body and body["status"] is not None:
-        container.auth.set_user_status(
-            user_id,
-            str(body["status"]),
-            actor_id=admin["id"],
-            ip=client_ip(request),
-        )
-        if body["status"] == "disabled":
-            await container.bots.disable_all_for_user(user_id, ip=client_ip(request))
+        status = str(body["status"])
+        reason = str(body.get("reason") or "")
+        if status == "disabled":
+            await bans_of(container).ban_user(
+                user_id,
+                reason=reason,
+                actor_id=admin["id"],
+                ip=client_ip(request),
+            )
+        elif status == "active":
+            await bans_of(container).unban_user(
+                user_id,
+                reason=reason,
+                actor_id=admin["id"],
+                ip=client_ip(request),
+            )
+        else:
+            raise ValidationError("status 只能是 active 或 disabled", field="status")
     if "quota" in body and body["quota"] is not None:
         if not isinstance(body["quota"], dict):
             raise ValidationError("quota 必须是对象", field="quota")
@@ -409,6 +444,9 @@ async def admin_bot_memories(request: web.Request) -> web.Response:
         page_size=page_size,
         kind=(request.query.get("kind") or "").strip() or None,
         q=(request.query.get("q") or "").strip() or None,
+        importance=int(request.query["importance"])
+        if (request.query.get("importance") or "").strip().isdigit()
+        else None,
     )
     _log_access(
         container,
@@ -484,6 +522,68 @@ async def admin_export_memories(request: web.Request) -> web.Response:
         detail={"count": data.get("count", 0)},
     )
     return ok(data)
+
+
+@routes.get("/api/admin/bots/{bot_id}/notes")
+async def admin_list_notes(request: web.Request) -> web.Response:
+    admin = require_admin(request)
+    container = container_of(request)
+    bot_id = request.match_info["bot_id"]
+    row = container.db.query_one("SELECT * FROM bots WHERE id = ?", (bot_id,))
+    if row is None or row["status"] == "deleted":
+        raise AppError("Bot 不存在", code="not_found", status=404)
+    confirmed = _require_content_confirm(request, container, row)
+    page, page_size = _paging(request)
+    data = container.memory_api.note_list(
+        bot_id,
+        page=page,
+        page_size=page_size,
+        q=(request.query.get("q") or "").strip() or None,
+        tag=(request.query.get("tag") or "").strip() or None,
+    )
+    _log_access(
+        container,
+        admin,
+        row,
+        "note",
+        bot_id,
+        client_ip(request),
+        "confirmed_encrypted" if confirmed else "",
+    )
+    return ok(data)
+
+
+@routes.get("/api/admin/bots/{bot_id}/notes/{short_id}")
+async def admin_read_note(request: web.Request) -> web.Response:
+    require_admin(request)
+    container = container_of(request)
+    bot_id = request.match_info["bot_id"]
+    row = container.db.query_one("SELECT * FROM bots WHERE id = ?", (bot_id,))
+    if row is None or row["status"] == "deleted":
+        raise AppError("Bot 不存在", code="not_found", status=404)
+    _require_content_confirm(request, container, row)
+    return ok(
+        container.memory_api.note_read(
+            bot_id,
+            request.match_info["short_id"],
+            offset=int(request.query.get("offset", 0)),
+            limit=int(request.query.get("limit", 4000)),
+        )
+    )
+
+
+@routes.delete("/api/admin/bots/{bot_id}/notes/{short_id}")
+async def admin_delete_note(request: web.Request) -> web.Response:
+    admin = require_admin(request)
+    container = container_of(request)
+    bot_id = request.match_info["bot_id"]
+    row = container.db.query_one("SELECT * FROM bots WHERE id = ?", (bot_id,))
+    if row is None or row["status"] == "deleted":
+        raise AppError("Bot 不存在", code="not_found", status=404)
+    _require_content_confirm(request, container, row)
+    container.memory_api.note_delete(bot_id, request.match_info["short_id"])
+    _log_access(container, admin, row, "note_delete", bot_id, client_ip(request))
+    return ok({"deleted": True})
 
 
 @routes.post("/api/admin/bots/{bot_id}/memories/import")
@@ -620,3 +720,314 @@ async def admin_reconcile_wallet(request: web.Request) -> web.Response:
     require_admin(request)
     container = container_of(request)
     return ok(container.billing.reconcile(request.match_info["user_id"]))
+
+
+# ---------------------------------------------------- redemption codes (M5)
+def redemption_of(container):
+    """Return the wired ``RedemptionService`` (lazy fallback for older roots)."""
+    from ..redemption import RedemptionService
+
+    service = getattr(container, "redemptions", None) or getattr(
+        container, "redemption", None
+    )
+    if service is None:
+        service = RedemptionService(
+            container.db,
+            audit=getattr(container, "audit", None),
+            clock=getattr(container, "clock", None),
+        )
+        container.redemptions = service
+    return service
+
+
+def _metering_of(container):
+    from ..metering import MeteringService
+
+    service = getattr(container, "metering", None)
+    if service is None:
+        service = MeteringService(
+            container.db,
+            audit=getattr(container, "audit", None),
+            clock=getattr(container, "clock", None),
+            settings_store=getattr(container, "settings_store", None),
+            catalog=getattr(container, "models", None),
+        )
+        container.metering = service
+    return service
+
+
+@routes.get("/api/admin/redemption-codes")
+async def admin_list_redemption_codes(request: web.Request) -> web.Response:
+    require_admin(request)
+    container = container_of(request)
+    page, page_size = _paging(request)
+    status = (request.query.get("status") or "").strip() or None
+    return ok(
+        redemption_of(container).list_codes(
+            page=page, page_size=page_size, status=status
+        )
+    )
+
+
+@routes.post("/api/admin/redemption-codes")
+async def admin_create_redemption_codes(request: web.Request) -> web.Response:
+    admin = require_admin(request)
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise ValidationError("请求体必须是 JSON 对象")
+    container = container_of(request)
+    points = body.get("points")
+    if points is None:
+        points = body.get("credits")
+    count = body.get("count")
+    if count is None:
+        count = body.get("quantity", 1)
+    codes = redemption_of(container).generate(
+        points=points,
+        note=str(body.get("note") or ""),
+        count=count,
+        max_uses=body.get("max_uses", 1),
+        expires_at=body.get("expires_at"),
+        actor=admin["id"],
+        ip=client_ip(request),
+    )
+    return ok({"codes": codes, "count": len(codes)}, status=201)
+
+
+@routes.patch("/api/admin/redemption-codes/{identifier}")
+async def admin_patch_redemption_code(request: web.Request) -> web.Response:
+    admin = require_admin(request)
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise ValidationError("请求体必须是 JSON 对象")
+    container = container_of(request)
+    service = redemption_of(container)
+    disabled = bool(body.get("disabled", True))
+    if disabled:
+        item = service.disable(
+            request.match_info["identifier"],
+            actor_id=admin["id"],
+            ip=client_ip(request),
+        )
+    else:
+        item = service.set_disabled(
+            request.match_info["identifier"],
+            False,
+            actor_id=admin["id"],
+            ip=client_ip(request),
+        )
+    return ok({"disabled": item["disabled"], "code": item})
+
+
+@routes.post("/api/admin/redemption-codes/{identifier}/disable")
+async def admin_disable_redemption_code(request: web.Request) -> web.Response:
+    """Console-compatible alias (POST …/{id-or-code}/disable)."""
+    admin = require_admin(request)
+    container = container_of(request)
+    item = redemption_of(container).disable(
+        request.match_info["identifier"],
+        actor_id=admin["id"],
+        ip=client_ip(request),
+    )
+    return ok({"disabled": True, "code": item})
+
+
+@routes.delete("/api/admin/redemption-codes/{identifier}")
+async def admin_delete_redemption_code(request: web.Request) -> web.Response:
+    """Soft delete == disable (keeps already-granted ledger history)."""
+    admin = require_admin(request)
+    container = container_of(request)
+    redemption_of(container).disable(
+        request.match_info["identifier"],
+        actor_id=admin["id"],
+        ip=client_ip(request),
+    )
+    return ok({"deleted": True, "disabled": True})
+
+
+@routes.post("/api/me/redeem")
+async def redeem_code(request: web.Request) -> web.Response:
+    user = current_user(request)
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise ValidationError("请求体必须是 JSON 对象")
+    result = redemption_of(container_of(request)).redeem(
+        user["id"],
+        str(body.get("code") or ""),
+        ip=client_ip(request),
+    )
+    return ok(result)
+
+
+# -------------------------------------------------- admin user detail (M5)
+@routes.get("/api/admin/users/{user_id}")
+async def admin_user_detail(request: web.Request) -> web.Response:
+    require_admin(request)
+    container = container_of(request)
+    user_id = request.match_info["user_id"]
+    user = container.auth.get_user(user_id)
+    if user is None:
+        raise AppError("用户不存在", code="not_found", status=404)
+
+    now = container.clock.now()
+    quota = container.auth.quota_for(user_id)
+    balance = int(
+        container.db.scalar(
+            "SELECT balance FROM wallets WHERE user_id = ?", (user_id,), 0
+        )
+        or 0
+    )
+    bots = [
+        {
+            **bot,
+            "user_id": user_id,
+            "owner_email": user.get("email", ""),
+        }
+        for bot in container.bots.list_for_user(user_id)
+    ]
+    summary = dict(_metering_of(container).usage_summary(user_id, days=30))
+    summary["requests"] = summary.get("records", 0)
+    by_bot = container.db.query(
+        "SELECT u.bot_id AS bot_id, COALESCE(b.name, '') AS bot_name, "
+        "COALESCE(SUM(u.points), 0) AS points, "
+        "COALESCE(SUM(u.tokens_in + u.tokens_out), 0) AS tokens, "
+        "COUNT(*) AS requests "
+        "FROM usage_records u LEFT JOIN bots b ON b.id = u.bot_id "
+        "WHERE u.user_id = ? AND u.created_at >= ? "
+        "GROUP BY u.bot_id ORDER BY points DESC, u.bot_id ASC",
+        (user_id, now - 30 * 86400),
+    )
+    for row in by_bot:
+        row["points"] = int(row.get("points") or 0)
+        row["tokens"] = int(row.get("tokens") or 0)
+        row["requests"] = int(row.get("requests") or 0)
+    recent_ledger = container.db.query(
+        "SELECT id, delta, type, ref, note, created_at FROM ledger "
+        "WHERE user_id = ? ORDER BY id DESC LIMIT 5",
+        (user_id,),
+    )
+    usage = {"summary30d": summary, "summary": summary, "by_bot": by_bot}
+    appeals = appeals_of(container)
+    detail = {
+        **container.auth.public_user(user),
+        "pending_appeal": appeals.pending_for_user(user_id),
+        "appeal_count": int(
+            container.db.scalar(
+                "SELECT COUNT(*) AS c FROM appeals WHERE user_id = ?", (user_id,), 0
+            )
+            or 0
+        ),
+        "bot_count": len(bots),
+        "balance": balance,
+        "wallet": {"balance": balance},
+        "quota": quota,
+        "bots": bots,
+        "usage": usage,
+        "recent_ledger": recent_ledger,
+    }
+    # ``user`` carries the full detail for the console drawer; the same
+    # sections are also exposed at the top level for older API consumers.
+    return ok({**detail, "user": detail})
+
+
+@routes.get("/api/admin/users/{user_id}/usage")
+async def admin_user_usage(request: web.Request) -> web.Response:
+    require_admin(request)
+    container = container_of(request)
+    user_id = request.match_info["user_id"]
+    if container.auth.get_user(user_id) is None:
+        raise AppError("用户不存在", code="not_found", status=404)
+    page, page_size = _paging(request)
+    service = _metering_of(container)
+    data = service.usage_list(user_id, page=page, page_size=page_size)
+    names = {
+        row["id"]: row["name"]
+        for row in container.db.query(
+            "SELECT id, name FROM bots WHERE user_id = ?", (user_id,)
+        )
+    }
+    for item in data.get("items", []):
+        item["bot_name"] = names.get(item.get("bot_id", ""), "")
+        item["tokens"] = int(item.get("tokens_in") or 0) + int(
+            item.get("tokens_out") or 0
+        )
+        item["requests"] = 1
+    summary = dict(service.usage_summary(user_id, days=30))
+    summary["requests"] = summary.get("records", 0)
+    data["summary"] = summary
+    return ok(data)
+
+
+# ------------------------------------------------- admin bot disable (M6)
+async def _optional_body(request: web.Request) -> dict[str, Any]:
+    """Notes on appeal approve/reject are optional; an empty body is fine."""
+    if not request.can_read_body:
+        return {}
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001 - optional payload; middleware catches bad JSON
+        return {}
+    return body if isinstance(body, dict) else {}
+
+
+@routes.patch("/api/admin/bots/{bot_id}")
+async def admin_patch_bot(request: web.Request) -> web.Response:
+    """Admin-level stop/start; independent from the owner's enabled toggle."""
+    admin = require_admin(request)
+    body = await request.json()
+    if not isinstance(body, dict) or "disabled" not in body:
+        raise ValidationError("disabled 不能为空", field="disabled")
+    disabled = body.get("disabled")
+    if not isinstance(disabled, bool):
+        raise ValidationError("disabled 必须是布尔值", field="disabled")
+    container = container_of(request)
+    bot = await bans_of(container).set_bot_admin_disabled(
+        request.match_info["bot_id"],
+        disabled,
+        str(body.get("reason") or ""),
+        actor_id=admin["id"],
+        ip=client_ip(request),
+    )
+    return ok({"bot": bot})
+
+
+# ------------------------------------------------------- appeals (M6)
+@routes.get("/api/admin/appeals")
+async def admin_list_appeals(request: web.Request) -> web.Response:
+    require_admin(request)
+    container = container_of(request)
+    page, page_size = _paging(request)
+    status = (request.query.get("status") or "").strip() or None
+    return ok(
+        appeals_of(container).list_admin(
+            status=status, page=page, page_size=page_size
+        )
+    )
+
+
+@routes.post("/api/admin/appeals/{appeal_id}/approve")
+async def admin_approve_appeal(request: web.Request) -> web.Response:
+    admin = require_admin(request)
+    body = await _optional_body(request)
+    container = container_of(request)
+    appeal = await appeals_of(container).approve(
+        request.match_info["appeal_id"],
+        admin_id=admin["id"],
+        note=str(body.get("note") or ""),
+        ip=client_ip(request),
+    )
+    return ok({"appeal": appeal})
+
+
+@routes.post("/api/admin/appeals/{appeal_id}/reject")
+async def admin_reject_appeal(request: web.Request) -> web.Response:
+    admin = require_admin(request)
+    body = await _optional_body(request)
+    container = container_of(request)
+    appeal = await appeals_of(container).reject(
+        request.match_info["appeal_id"],
+        admin_id=admin["id"],
+        note=str(body.get("note") or ""),
+        ip=client_ip(request),
+    )
+    return ok({"appeal": appeal})

@@ -17,6 +17,7 @@ import type {
   ConfProfile,
   AuditQuery,
   PageResult,
+  Quota,
   Template,
   TemplateInput,
 } from '@/types'
@@ -132,8 +133,19 @@ export const useAdminStore = defineStore('admin', () => {
     }
   }
 
-  async function setUserStatus(id: string, status: 'active' | 'disabled'): Promise<AdminUser> {
-    const result = await adminApi.patchAdminUser(id, { status })
+  async function setUserStatus(
+    id: string,
+    status: 'active' | 'disabled',
+    reason = '',
+  ): Promise<AdminUser> {
+    const result = await adminApi.patchAdminUser(id, { status, ...(reason ? { reason } : {}) })
+    const index = users.value.findIndex((item) => item.id === id)
+    if (index >= 0) users.value.splice(index, 1, result.user)
+    return result.user
+  }
+
+  async function updateUserQuota(id: string, quota: Quota): Promise<AdminUser> {
+    const result = await adminApi.patchAdminUser(id, { quota })
     const index = users.value.findIndex((item) => item.id === id)
     if (index >= 0) users.value.splice(index, 1, result.user)
     return result.user
@@ -154,8 +166,8 @@ export const useAdminStore = defineStore('admin', () => {
     }
   }
 
-  async function disableBot(id: string): Promise<void> {
-    const result = await adminApi.disableAdminBot(id)
+  async function disableBot(id: string, reason = ''): Promise<void> {
+    const result = await adminApi.disableAdminBot(id, reason)
     const index = bots.value.findIndex((item) => item.id === id)
     if (index >= 0) bots.value.splice(index, 1, { ...bots.value[index], ...result.bot })
   }
@@ -252,6 +264,7 @@ export const useAdminStore = defineStore('admin', () => {
     removeTemplate,
     loadUsers,
     setUserStatus,
+    updateUserQuota,
     loadBots,
     disableBot,
     loadAudit,

@@ -40,6 +40,7 @@ from .app import client_ip, container_of, current_user, ok
 routes = web.RouteTableDef()
 
 _REQUIRED = object()
+MEMORY_HEALTH_KEY = "memory.health"
 
 
 # --------------------------------------------------------------------------
@@ -168,6 +169,9 @@ def _validated_behavior(payload: dict[str, Any]) -> dict[str, Any]:
     for key, (minimum, maximum) in bounds.items():
         if key in payload:
             result[key] = _int(payload[key], f"behavior.{key}", minimum, maximum)
+    for key in ("auto_inject", "auto_extract"):
+        if key in payload:
+            result[key] = _bool(payload[key], f"behavior.{key}")
     return result
 
 
@@ -262,6 +266,55 @@ async def put_memory_settings(request: web.Request) -> web.Response:
     return ok(mask_memory_settings(merged))
 
 
+def _save_health(container: Any, kind: str, record: dict[str, Any]) -> None:
+    current = container.settings_store.get(MEMORY_HEALTH_KEY, {}) or {}
+    if not isinstance(current, dict):
+        current = {}
+    current[kind] = {**record, "at": int(time.time())}
+    container.settings_store.set(MEMORY_HEALTH_KEY, current, actor_id="system")
+
+
+@routes.get("/api/admin/settings/memory/status")
+async def memory_settings_status(request: web.Request) -> web.Response:
+    require_admin(request)
+    container = container_of(request)
+    settings = _settings_of(container)
+    health = container.settings_store.get(MEMORY_HEALTH_KEY, {}) or {}
+
+    def section_status(kind: str) -> dict[str, Any]:
+        value = settings[kind]
+        configured = bool(value.get("base_url") and value.get("model") and value.get("enabled"))
+        record = health.get(kind) if isinstance(health.get(kind), dict) else {}
+        last_ok = record.get("ok")
+        last_checked = int(record.get("at") or 0)
+        degraded = bool(configured and last_checked and last_ok is False)
+        if not configured:
+            state = "unconfigured"
+        elif degraded:
+            state = "degraded"
+        else:
+            state = "ok"
+        return {
+            "state": state,
+            "configured": configured,
+            "enabled": bool(value.get("enabled")),
+            "model": value.get("model") or "",
+            "last_ok": last_ok,
+            "last_checked": last_checked,
+            "last_error": str(record.get("error") or ""),
+            "latency_ms": int(record.get("latency_ms") or 0),
+        }
+
+    return ok(
+        {
+            "embedding": section_status("embedding"),
+            "rerank": section_status("rerank"),
+            "behavior": dict(settings["behavior"]),
+            "fts": {"available": True, "mode": "sqlite-fts5-cjk"},
+        }
+    )
+
+
 @routes.post("/api/admin/settings/memory/test")
 async def test_memory_settings(request: web.Request) -> web.Response:
     admin = require_admin(request)
@@ -329,6 +382,11 @@ async def test_memory_settings(request: web.Request) -> web.Response:
             "memory.settings_tested",
             {"kind": kind, "ok": False},
         )
+        _save_health(
+            container,
+            kind,
+            {"ok": False, "error": exc.public_message()},
+        )
         raise AppError(
             f"{kind} 连接测试失败：{exc.public_message()}",
             code="upstream_error",
@@ -343,6 +401,7 @@ async def test_memory_settings(request: web.Request) -> web.Response:
             "memory.settings_tested",
             {"kind": kind, "ok": False},
         )
+        _save_health(container, kind, {"ok": False, "error": "连接错误"})
         raise AppError(
             f"{kind} 连接测试失败（连接错误）",
             code="upstream_error",
@@ -352,6 +411,15 @@ async def test_memory_settings(request: web.Request) -> web.Response:
 
     result["latency_ms"] = int((time.monotonic() - started) * 1000)
     result["model"] = model
+    _save_health(
+        container,
+        kind,
+        {
+            "ok": True,
+            "latency_ms": result["latency_ms"],
+            "error": "",
+        },
+    )
     _audit(
         container,
         admin,

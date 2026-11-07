@@ -32,8 +32,11 @@
       </template>
     </PageHeader>
 
+    <BotTabs :bot-id="botId" active="memory" />
+
     <v-alert type="info" variant="tonal" density="compact" class="mb-4" icon="mdi-brain">
-      记忆由对话自动记录；可导入/导出 JSON 快照（含记忆与笔记，导入按内容去重）。编辑保存后以服务端结果为准。
+      记忆由对话自动记录；可导入/导出 JSON 快照（含记忆与笔记，导入按内容去重）。
+      重要度为 6 的记忆会在每条对话中<strong>始终注入</strong>；自动提取的记忆带「自动提取」标签。
     </v-alert>
 
     <v-card class="filter-card mb-4">
@@ -61,6 +64,15 @@
           hide-details
           density="compact"
           class="filter-select"
+        />
+        <v-select
+          v-model="filters.importance"
+          :items="importanceFilterOptions"
+          label="重要度"
+          hide-details
+          density="compact"
+          class="filter-select"
+          @update:model-value="applyFilters"
         />
         <v-btn type="submit" color="primary" variant="tonal">筛选</v-btn>
         <v-btn variant="text" @click="resetFilters">重置</v-btn>
@@ -130,6 +142,14 @@
                     <button type="button" class="content-link" @click="openEdit(memory)">
                       {{ truncate(memory.content, 120) }}
                     </button>
+                    <v-chip
+                      v-if="isAutoExtracted(memory)"
+                      size="x-small"
+                      variant="tonal"
+                      color="info"
+                    >
+                      自动提取
+                    </v-chip>
                   </div>
                   <div v-if="memory.reasoning" class="content-reason text-muted">
                     {{ truncate(memory.reasoning, 100) }}
@@ -146,8 +166,17 @@
                   </v-chip>
                 </td>
                 <td class="nowrap">
-                  <span class="importance" :title="`重要度 ${memory.importance}/5`">
-                    ★ {{ memory.importance }}/5
+                  <v-chip
+                    v-if="memory.importance >= 6"
+                    size="x-small"
+                    variant="tonal"
+                    color="error"
+                    :title="importanceText(memory.importance)"
+                  >
+                    总是注入
+                  </v-chip>
+                  <span v-else class="importance" :title="`重要度 ${memory.importance}/6`">
+                    ★ {{ memory.importance }}/6
                   </span>
                 </td>
                 <td class="tags-cell">
@@ -229,9 +258,18 @@
             >
               {{ memory.kind_label || kindLabel(memory.kind) }}
             </v-chip>
+            <v-chip
+              v-if="isAutoExtracted(memory)"
+              size="x-small"
+              variant="tonal"
+              color="info"
+            >
+              自动提取
+            </v-chip>
             <v-icon v-if="memory.pinned" color="warning" size="18" title="已置顶">mdi-pin</v-icon>
             <v-spacer />
-            <span class="importance">★ {{ memory.importance }}/5</span>
+            <span v-if="memory.importance >= 6" class="importance importance--inject">总是注入</span>
+            <span v-else class="importance">★ {{ memory.importance }}/6</span>
           </div>
           <p class="memory-card__content">{{ memory.content }}</p>
           <p v-if="memory.reasoning" class="memory-card__reason text-muted">
@@ -306,7 +344,7 @@
           />
           <v-select
             v-model="editor.importance"
-            :items="importanceOptions"
+            :items="memoryImportanceOptions"
             label="重要度"
             class="mb-2"
           />
@@ -389,7 +427,7 @@
               v-for="memory in searchResults"
               :key="memory.id"
               :title="truncate(memory.content, 80)"
-              :subtitle="`${memory.kind_label || kindLabel(memory.kind)} · 重要度 ${memory.importance}/5 · 召回 ${memory.recall_count} 次`"
+              :subtitle="`${memory.kind_label || kindLabel(memory.kind)} · 重要度 ${memory.importance}/6 · 召回 ${memory.recall_count} 次`"
             >
               <template #prepend>
                 <v-chip
@@ -496,6 +534,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDisplay } from 'vuetify'
 import PageHeader from '@/components/PageHeader.vue'
+import BotTabs from '@/components/BotTabs.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
@@ -504,6 +543,7 @@ import { useMemoryStore } from '@/stores/memory'
 import { importMemories } from '@/api/memory'
 import { useUiStore } from '@/stores/ui'
 import { useMemoryKindMeta } from '@/composables/useMemoryKindMeta'
+import { importanceColor, importanceText, isAutoExtracted, memoryImportanceOptions } from '@/utils/memoryMeta'
 import { downloadJson } from '@/utils/download'
 import { errorMessage } from '@/utils/errors'
 import { formatDateTime, formatRelative, truncate } from '@/utils/format'
@@ -527,8 +567,10 @@ const bot = computed(() => (bots.current?.id === botId.value ? bots.current : nu
 const pageTitle = computed(() => (bot.value ? `${bot.value.name} · 记忆` : '记忆'))
 const pageCount = computed(() => Math.max(1, Math.ceil(bucket.value.total / Math.max(1, bucket.value.pageSize))))
 
-const filters = reactive({ kind: '', tag: '', q: '' })
-const hasFilters = computed(() => Boolean(filters.kind || filters.tag || filters.q))
+const filters = reactive({ kind: '', tag: '', q: '', importance: '' })
+const hasFilters = computed(() =>
+  Boolean(filters.kind || filters.tag || filters.q || filters.importance),
+)
 
 const kindFilterOptions = [
   { title: '全部类型', value: '' },
@@ -538,10 +580,10 @@ const kindFilterOptions = [
   { title: '笔记', value: 'note' },
 ]
 const kindEditOptions = kindFilterOptions.slice(1)
-const importanceOptions = [1, 2, 3, 4, 5].map((value) => ({
-  title: `${value} · ${['很低', '较低', '一般', '较高', '很高'][value - 1]}`,
-  value,
-}))
+const importanceFilterOptions = [
+  { title: '全部重要度', value: '' },
+  ...memoryImportanceOptions.map((option) => ({ title: option.title, value: String(option.value) })),
+]
 
 const exporting = ref(false)
 const importOpen = ref(false)
@@ -608,6 +650,7 @@ function syncFromQuery(): void {
   filters.kind = stringQuery(route.query.kind)
   filters.tag = stringQuery(route.query.tag)
   filters.q = stringQuery(route.query.q)
+  filters.importance = stringQuery(route.query.importance)
 }
 
 async function loadBotInfo(): Promise<void> {
@@ -628,6 +671,7 @@ async function load(): Promise<void> {
       kind: filters.kind || undefined,
       tag: filters.tag || undefined,
       q: filters.q || undefined,
+      importance: filters.importance || undefined,
     })
   } catch {
     /* 错误已写入 bucket，页面展示重试 */
@@ -643,6 +687,7 @@ async function applyFilters(): Promise<void> {
   if (filters.q) query.q = filters.q
   if (filters.kind) query.kind = filters.kind
   if (filters.tag) query.tag = filters.tag
+  if (filters.importance) query.importance = filters.importance
   await router.replace({ query })
 }
 
@@ -650,6 +695,7 @@ async function resetFilters(): Promise<void> {
   filters.q = ''
   filters.kind = ''
   filters.tag = ''
+  filters.importance = ''
   await router.replace({ query: {} })
 }
 
@@ -960,6 +1006,11 @@ async function runSearch(): Promise<void> {
   margin-top: 4px;
   font-size: 0.76rem;
   line-height: 1.5;
+}
+
+.importance--inject {
+  color: var(--console-danger);
+  font-weight: 700;
 }
 
 .importance {

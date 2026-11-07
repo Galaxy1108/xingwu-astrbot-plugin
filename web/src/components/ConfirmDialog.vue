@@ -153,24 +153,25 @@ function onConfirm(): void {
   width: 100%;
   max-width: 480px;
   background: var(--console-surface);
-  border-radius: var(--console-radius);
+  border: 1px solid var(--console-border);
+  border-radius: 8px;
   box-shadow: 0 16px 40px rgba(16, 24, 40, 0.24);
-  padding: 20px;
+  padding: 22px;
   box-sizing: border-box;
   outline: none;
 }
 
 .confirm-title {
   margin: 0 0 10px;
-  font-size: 1.05rem;
+  font-size: 18px;
   font-weight: 650;
   line-height: 1.4;
 }
 
 .confirm-body {
   color: var(--console-text-muted);
-  font-size: 0.875rem;
-  line-height: 1.6;
+  font-size: 13px;
+  line-height: 1.65;
 }
 
 .confirm-message {
@@ -222,9 +223,9 @@ function onConfirm(): void {
 .confirm-btn {
   min-height: 40px;
   padding: 0 18px;
-  font-size: 0.875rem;
+  font-size: 14px;
   font-weight: 500;
-  border-radius: var(--console-radius);
+  border-radius: 8px;
   border: 1px solid transparent;
   cursor: pointer;
 }
@@ -241,7 +242,7 @@ function onConfirm(): void {
 }
 
 .confirm-btn--ghost:hover {
-  background: #f2f5f8;
+  background: var(--console-surface-variant);
 }
 
 .confirm-btn--primary {
@@ -254,12 +255,14 @@ function onConfirm(): void {
 }
 
 .confirm-btn--danger {
-  background: #c62828;
-  color: #fff;
+  background: var(--console-danger-soft);
+  border-color: var(--console-danger-border);
+  color: var(--console-danger);
 }
 
 .confirm-btn--danger:hover {
-  background: #a61f1f;
+  background: var(--console-danger-soft);
+  filter: brightness(0.96);
 }
 
 .confirm-btn:disabled {

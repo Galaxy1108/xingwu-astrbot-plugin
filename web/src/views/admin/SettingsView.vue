@@ -26,6 +26,58 @@
     <LoadingSkeleton v-if="loading && !settings" variant="table" :rows="5" />
 
     <template v-else-if="settings">
+      <v-card class="settings-card status-card mb-4" data-testid="memory-settings-status">
+        <div class="card-head">
+          <div class="card-head__text">
+            <h3 class="card-title">
+              <v-icon color="primary" size="20">mdi-pulse</v-icon>
+              运行状态
+            </h3>
+            <p class="card-sub text-muted">
+              当前检索链路：向量化 / 重排是否可用，以及 FTS 兜底状态。
+            </p>
+          </div>
+          <v-btn variant="text" size="small" prepend-icon="mdi-refresh" :loading="statusLoading" @click="loadStatus">
+            刷新状态
+          </v-btn>
+        </div>
+        <v-alert v-if="statusError" type="info" variant="tonal" density="compact" class="mb-3">
+          {{ statusError }}
+        </v-alert>
+        <div class="status-grid">
+          <div class="status-item">
+            <div class="status-label text-muted">向量化</div>
+            <v-chip :color="providerState(status?.embedding).color" variant="tonal" size="small">
+              {{ providerState(status?.embedding).label }}
+            </v-chip>
+            <div class="status-meta text-muted">{{ providerMeta(status?.embedding) }}</div>
+          </div>
+          <div class="status-item">
+            <div class="status-label text-muted">重排</div>
+            <v-chip :color="providerState(status?.rerank).color" variant="tonal" size="small">
+              {{ providerState(status?.rerank).label }}
+            </v-chip>
+            <div class="status-meta text-muted">{{ providerMeta(status?.rerank) }}</div>
+          </div>
+          <div class="status-item">
+            <div class="status-label text-muted">FTS</div>
+            <v-chip :color="status?.fts?.available === false ? 'error' : 'success'" variant="tonal" size="small">
+              {{ status?.fts?.available === false ? '不可用' : '可用' }} · {{ status?.fts?.mode || 'BM25' }}
+            </v-chip>
+            <div class="status-meta text-muted">全文检索兜底链路</div>
+          </div>
+        </div>
+        <v-alert
+          v-if="status?.embedding?.state === 'degraded' || status?.rerank?.state === 'degraded'"
+          type="error"
+          variant="tonal"
+          density="compact"
+          class="mt-3"
+        >
+          检索已回退 FTS + 规则重排；请检查向量化/重排配置或查看错误信息。
+        </v-alert>
+      </v-card>
+
       <v-row dense>
         <!-- 向量化 -->
         <v-col cols="12" lg="6">
@@ -351,6 +403,36 @@
           </v-col>
         </v-row>
 
+        <v-divider class="my-4" />
+        <v-row dense>
+          <v-col cols="12" md="6">
+            <v-switch
+              v-model="behavior.auto_inject"
+              color="primary"
+              density="compact"
+              hide-details
+              label="主动注入（auto_inject）"
+              data-testid="memory-behavior-auto-inject"
+            />
+            <p class="behavior-note text-muted">
+              每次对话按当前话题召回相关记忆，写入 system prompt；会使用更多上下文 Token。
+            </p>
+          </v-col>
+          <v-col cols="12" md="6">
+            <v-switch
+              v-model="behavior.auto_extract"
+              color="primary"
+              density="compact"
+              hide-details
+              label="自动记忆（auto_extract）"
+              data-testid="memory-behavior-auto-extract"
+            />
+            <p class="behavior-note text-muted">
+              每轮后从用户消息提取长期偏好/事实并写入记忆；涉及隐私内容时请谨慎开启。
+            </p>
+          </v-col>
+        </v-row>
+
         <div class="card-actions">
           <v-btn color="primary" :loading="savingBehavior" @click="saveBehavior" variant="tonal">保存检索行为</v-btn>
         </div>
@@ -372,6 +454,7 @@ import { useUiStore } from '@/stores/ui'
 import { isApiError } from '@/api/client'
 import {
   getMemorySettings,
+  getMemorySettingsStatus,
   testMemorySettings,
   updateMemorySettings,
 } from '@/api/admin'
@@ -392,13 +475,21 @@ import {
   validateEmbeddingForm,
   validateRerankForm,
 } from '@/utils/memorySettings'
-import type { MemorySettings, MemorySettingsTestResult } from '@/types'
+import type {
+  MemoryProviderStatus,
+  MemorySettings,
+  MemorySettingsStatus,
+  MemorySettingsTestResult,
+} from '@/types'
 
 const ui = useUiStore()
 
 const loading = ref(false)
 const loadError = ref('')
 const settings = ref<MemorySettings | null>(null)
+const status = ref<MemorySettingsStatus | null>(null)
+const statusLoading = ref(false)
+const statusError = ref('')
 
 const embedding = reactive(embeddingFormFrom(defaultEmbedding))
 const rerank = reactive(rerankFormFrom(defaultRerank))
@@ -460,14 +551,56 @@ function applySettings(data: Partial<MemorySettings>): void {
 async function load(): Promise<void> {
   loading.value = true
   loadError.value = ''
+  await Promise.allSettled([loadSettings(), loadStatus()])
+  loading.value = false
+}
+
+async function loadSettings(): Promise<void> {
   try {
     const data = await getMemorySettings()
     applySettings(data)
   } catch (error) {
     loadError.value = friendlyError(error, '加载记忆 API 设置失败')
-  } finally {
-    loading.value = false
   }
+}
+
+async function loadStatus(): Promise<void> {
+  statusLoading.value = true
+  statusError.value = ''
+  try {
+    status.value = await getMemorySettingsStatus()
+  } catch (error) {
+    const apiError = isApiError(error) ? error : null
+    statusError.value =
+      apiError && (apiError.status === 404 || apiError.status === 405)
+        ? '运行状态接口尚未就绪，请稍后刷新重试。'
+        : friendlyError(error, '加载运行状态失败')
+  } finally {
+    statusLoading.value = false
+  }
+}
+
+function providerState(provider?: MemoryProviderStatus): { label: string; color: string } {
+  if (
+    !provider ||
+    provider.state === 'unconfigured' ||
+    provider.configured === false ||
+    provider.enabled === false
+  ) {
+    return { label: '未配置', color: 'default' }
+  }
+  if (provider.state === 'degraded') return { label: '已配置但降级', color: 'warning' }
+  if (provider.state === 'ok') return { label: '已启用 · 正常', color: 'success' }
+  return { label: provider.state || '未知', color: 'default' }
+}
+
+function providerMeta(provider?: MemoryProviderStatus): string {
+  if (!provider) return '暂无状态'
+  const last = provider.last_checked || provider.last_test_at || provider.last_tested_at
+  const time = last ? new Date(last * 1000).toLocaleString('zh-CN') : '尚未测试'
+  const latency = provider.latency_ms ? `（${provider.latency_ms}ms）` : ''
+  if (provider.last_error) return `${time} · ${provider.last_error}`
+  return provider.last_ok === false ? `${time} · 最近测试失败` : `最近测试：${time}${latency}`
 }
 
 async function saveEmbedding(): Promise<void> {
@@ -602,6 +735,40 @@ onMounted(() => {
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.status-card {
+  height: auto;
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.status-item {
+  padding: 10px 12px;
+  border: 1px solid var(--console-border);
+  border-radius: 8px;
+}
+
+.status-label {
+  font-size: 11.5px;
+  margin-bottom: 5px;
+}
+
+.status-meta {
+  margin-top: 6px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.behavior-note {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
 }
 
 .settings-card {

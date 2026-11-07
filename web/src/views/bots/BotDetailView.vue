@@ -2,22 +2,25 @@
   <div>
     <PageHeader
       :title="bot?.name || 'Bot 详情'"
-      :description="bot ? `${platformLabel(bot.platform)} · ${bot.template_name || '自定义模板'}` : '查看与维护 Bot 的基础信息、绑定状态与扫码会话。'"
+      :description="bot ? `${platformLabel(bot.platform)} · ${bot.template_name || '自定义模板'}` : '查看与维护 Bot 的基础信息、运行状态与设置。'"
       back-to="/bots"
     >
       <template #actions>
         <StatusChip v-if="bot" :status="bot.status" />
         <v-btn
-          v-if="bot"
-          variant="tonal"
-          prepend-icon="mdi-brain"
-          :to="`/bots/${botId}/memory`"
+          icon
+          variant="text"
+          aria-label="刷新"
+          title="刷新"
+          :loading="loading"
+          @click="reload"
         >
-          记忆
+          <v-icon>mdi-refresh</v-icon>
         </v-btn>
-        <v-btn variant="text" prepend-icon="mdi-refresh" :loading="loading" @click="reload">刷新</v-btn>
       </template>
     </PageHeader>
+
+    <BotTabs :bot-id="botId" :active="activeTab" />
 
     <v-alert v-if="loadError" type="error" variant="tonal" class="mb-4">
       <div class="alert-row">
@@ -32,6 +35,150 @@
     <LoadingSkeleton v-if="loading && !bot" variant="detail" />
 
     <template v-else-if="bot">
+      <v-alert
+        v-if="bot.admin_disabled"
+        type="error"
+        variant="tonal"
+        class="mb-4"
+        icon="mdi-cancel"
+      >
+        <div class="alert-row">
+          <div>
+            <strong>该 Bot 已被管理员停用</strong>
+            <div class="admin-stop-reason">
+              原因：{{ bot.admin_disabled_reason || '管理员未填写原因' }}
+            </div>
+          </div>
+          <v-btn
+            color="error"
+            variant="tonal"
+            size="small"
+            :disabled="appealSubmitted"
+            @click="appealOpen = true"
+          >
+            {{ appealSubmitted ? '申诉已提交' : '申请启用' }}
+          </v-btn>
+        </div>
+      </v-alert>
+
+      <template v-if="activeTab === 'settings'">
+        <v-alert v-if="settingsError" type="error" variant="tonal" class="mb-4">
+          {{ settingsError }}
+        </v-alert>
+
+        <v-card class="panel settings-panel">
+          <h2 class="section-title">基础设置</h2>
+          <v-text-field
+            v-model.trim="settingsName"
+            label="名称"
+            counter="32"
+            maxlength="32"
+            class="mb-3"
+            data-testid="bot-settings-name"
+          />
+          <v-select
+            v-model="settingsModelId"
+            :items="modelOptions"
+            item-title="title"
+            item-value="value"
+            label="模型配置"
+            :loading="modelsLoading"
+            no-data-text="暂无可用模型配置"
+            hint="来自管理端「模型与定价」；留空表示沿用模板 / 基础配置"
+            persistent-hint
+            class="mb-5"
+          />
+          <div class="switch-row">
+            <div>
+              <div class="switch-label">启用平台实例</div>
+              <div class="text-muted switch-hint">
+                {{
+                  bot.admin_disabled
+                    ? '管理员已停用该 Bot，需先申诉恢复后才能操作。'
+                    : bot.status === 'pending_qr'
+                      ? '待扫码状态下不能启用，请先完成扫码接入。'
+                      : '关闭后平台实例停止接收消息。'
+                }}
+              </div>
+            </div>
+            <v-switch
+              v-model="settingsEnabled"
+              :disabled="bot.status === 'pending_qr' || Boolean(bot.admin_disabled)"
+              color="primary"
+              hide-details
+              inset
+            />
+          </div>
+          <div class="switch-row">
+            <div>
+              <div class="switch-label">流式输出（streaming）</div>
+              <div class="text-muted switch-hint">
+                在平台支持时逐段输出回复（如 QQ 官方机器人）；不支持时会自动回退整段发送。
+              </div>
+            </div>
+            <v-switch
+              v-model="settingsStreaming"
+              color="primary"
+              hide-details
+              inset
+              data-testid="bot-settings-streaming"
+            />
+          </div>
+        </v-card>
+
+        <v-card class="panel settings-panel mt-4">
+          <button type="button" class="advanced-toggle" @click="advancedOpen = !advancedOpen">
+            <v-icon size="18">mdi-tune-variant</v-icon>
+            <span class="advanced-title">高级设置</span>
+            <span class="text-muted advanced-sub">上下文压缩与轮次</span>
+            <v-spacer />
+            <v-icon size="20">{{ advancedOpen ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
+          </button>
+          <div v-if="advancedOpen" class="advanced-body">
+            <v-row dense>
+              <v-col cols="12" sm="6">
+                <v-text-field
+                  v-model.number="settingsCompressionMaxTurns"
+                  label="上下文压缩阈值（轮次）"
+                  type="number"
+                  min="1"
+                  max="100"
+                  hint="1–100；超过该轮次后触发上下文压缩"
+                  persistent-hint
+                  data-testid="bot-settings-compression-turns"
+                />
+              </v-col>
+              <v-col cols="12" sm="6">
+                <v-select
+                  v-model="settingsCompressionStrategy"
+                  :items="compressionStrategies"
+                  item-title="title"
+                  item-value="value"
+                  label="压缩策略"
+                  data-testid="bot-settings-compression-strategy"
+                />
+              </v-col>
+            </v-row>
+            <p class="advanced-note text-muted">
+              truncate_by_turns 按轮次截断较早消息；llm_compress 会调用模型总结较早对话，可能产生额外 Token 消耗。
+            </p>
+          </div>
+        </v-card>
+
+        <div class="settings-actions">
+          <v-btn
+            color="primary"
+            variant="tonal"
+            :loading="settingsSaving"
+            data-testid="bot-settings-save"
+            @click="saveSettings"
+          >
+            保存设置
+          </v-btn>
+        </div>
+      </template>
+
+      <template v-else>
       <div class="detail-grid">
         <v-card class="panel">
           <h2 class="section-title">基础信息</h2>
@@ -78,9 +225,11 @@
               <div class="switch-label">启用平台实例</div>
               <div class="text-muted switch-hint">
                 {{
-                  bot.status === 'pending_qr'
-                    ? '待扫码状态下不能启用，请先完成扫码接入。'
-                    : bot.enabled
+                  bot.admin_disabled
+                    ? '管理员已停用该 Bot，需先申诉恢复后才能操作。'
+                    : bot.status === 'pending_qr'
+                      ? '待扫码状态下不能启用，请先完成扫码接入。'
+                      : bot.enabled
                       ? '平台实例运行中，可接收消息。'
                       : '平台实例已停用，不处理消息。'
                 }}
@@ -88,7 +237,7 @@
             </div>
             <v-switch
               :model-value="bot.enabled"
-              :disabled="bot.status === 'pending_qr' || toggling"
+              :disabled="bot.status === 'pending_qr' || bot.admin_disabled || toggling"
               :loading="toggling"
               color="primary"
               hide-details
@@ -97,77 +246,8 @@
             />
           </div>
 
-          <v-divider class="my-4" />
-
-          <div class="action-stack">
-            <v-btn variant="tonal" prepend-icon="mdi-pencil" block @click="openRename">修改名称</v-btn>
-            <v-btn
-              variant="tonal"
-              color="primary"
-              prepend-icon="mdi-qrcode-scan"
-              block
-              :loading="qrBusy"
-              @click="startQr"
-            >
-              {{ bot.bound ? '重新扫码' : '开始扫码接入' }}
-            </v-btn>
-          </div>
-          <p class="text-muted action-note">
-            重新扫码会重新走平台登录流程；当前契约未提供独立的解绑接口，若状态不允许会给出提示。
-          </p>
         </v-card>
       </div>
-
-      <v-card class="panel mt-4">
-        <div class="qr-head">
-          <h2 class="section-title">扫码接入</h2>
-          <span v-if="qr" class="text-muted qr-meta">会话 {{ qr.id }}</span>
-        </div>
-
-        <QrPanel
-          v-if="qr"
-          :status="qr.status"
-          :image="qr.qr_image"
-          :expires-at="qr.expires_at"
-          :refresh-count="qr.refresh_count"
-          :message="qrMessage"
-          :error="qrErrorText"
-          :busy="qrBusy"
-          @regenerate="startQr"
-        />
-
-        <v-alert
-          v-if="devMode && qr"
-          type="info"
-          variant="tonal"
-          density="compact"
-          class="mt-4"
-        >
-          <div class="dev-box">
-            <span>开发模式：模拟扫码状态机（仅 dev server 可见）</span>
-            <div class="dev-actions">
-              <v-btn size="small" variant="tonal" @click="simulate('scanned')">模拟已扫码</v-btn>
-              <v-btn size="small" variant="tonal" color="success" @click="simulate('confirm')">
-                模拟确认登录
-              </v-btn>
-              <v-btn size="small" variant="tonal" color="warning" @click="simulate('expire')">
-                模拟过期
-              </v-btn>
-            </div>
-          </div>
-        </v-alert>
-
-        <EmptyState
-          v-else
-          icon="mdi-qrcode"
-          title="尚未生成二维码"
-          description="生成二维码后，请使用对应平台 App 扫码并在手机上确认；二维码有效期 60 秒，过期会自动刷新（最多 3 次）。"
-        >
-          <template #actions>
-            <v-btn color="primary" :loading="qrBusy" @click="startQr" variant="tonal">生成二维码</v-btn>
-          </template>
-        </EmptyState>
-      </v-card>
 
       <v-card class="danger-zone mt-4">
         <h2 class="danger-title">危险区</h2>
@@ -178,31 +258,20 @@
           删除 Bot
         </v-btn>
       </v-card>
+      </template>
     </template>
 
-    <v-dialog v-model="renameOpen" max-width="460" persistent>
-      <v-card class="dialog-card">
-        <v-card-title class="dialog-title">修改 Bot 名称</v-card-title>
-        <v-card-text>
-          <v-alert v-if="renameError" type="error" variant="tonal" density="compact" class="mb-3">
-            {{ renameError }}
-          </v-alert>
-          <v-text-field
-            v-model.trim="renameName"
-            label="新名称"
-            counter="32"
-            maxlength="32"
-            autofocus
-            @keyup.enter="submitRename"
-          />
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn variant="text" :disabled="renameSaving" @click="renameOpen = false">取消</v-btn>
-          <v-btn color="primary" :loading="renameSaving" @click="submitRename" variant="tonal">保存</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <ReasonDialog
+      v-model="appealOpen"
+      :title="`申请启用「${bot?.name || ''}」？`"
+      message="管理员会看到该 Bot 的停用原因与你的申诉说明；处理结果可在账号申诉记录中查看。"
+      label="申诉说明"
+      placeholder="请说明需要恢复该 Bot 的原因"
+      confirm-text="提交申诉"
+      :loading="appealing"
+      @confirm="submitBotAppeal"
+      @cancel="appealOpen = false"
+    />
 
     <ConfirmDialog
       v-model="deleteOpen"
@@ -219,23 +288,22 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusChip from '@/components/StatusChip.vue'
-import QrPanel from '@/components/QrPanel.vue'
-import EmptyState from '@/components/EmptyState.vue'
 import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import ReasonDialog from '@/components/ReasonDialog.vue'
+import BotTabs from '@/components/BotTabs.vue'
 import { useBotsStore } from '@/stores/bots'
 import { useUiStore } from '@/stores/ui'
-import { usePolling } from '@/composables/usePolling'
 import { useClipboard } from '@/composables/useClipboard'
-import { toApiError } from '@/api/client'
-import { getVersion } from '@/api/system'
-import { devQrAction, type DevQrAction } from '@/api/dev'
+import { submitAppeal } from '@/api/appeals'
+import { listModels } from '@/api/models'
 import { errorMessage } from '@/utils/errors'
 import { formatDateTime, formatRelative, platformLabel } from '@/utils/format'
+import type { ModelProfile } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -245,104 +313,54 @@ const { copied, copy } = useClipboard()
 
 const botId = computed(() => (typeof route.params.id === 'string' ? route.params.id : ''))
 const bot = computed(() => (bots.current?.id === botId.value ? bots.current : null))
+const activeTab = computed<'overview' | 'settings'>(() =>
+  route.query.tab === 'settings' ? 'settings' : 'overview',
+)
+
+const modelOptions = computed(() => [
+  { title: '沿用模板 / 基础配置', value: '' },
+  ...models.value.map((model) => ({
+    title: `${model.name} · ${model.model || model.provider}`,
+    value: model.id,
+  })),
+])
 const loading = computed(() => bots.currentLoading)
 const loadError = ref('')
 
 const toggling = ref(false)
-const qrBusy = ref(false)
-const qrMessage = ref('')
-const qrErrorText = ref('')
-const qr = computed(() => (bot.value?.qr ?? bots.qr) || null)
-
-const renameOpen = ref(false)
-const renameName = ref('')
-const renameError = ref('')
-const renameSaving = ref(false)
 
 const deleteOpen = ref(false)
 const deleting = ref(false)
-const finalizing = ref(false)
-const devMode = ref(false)
 
-const { start: startPolling, stop: stopPolling } = usePolling(
-  async () => {
-    if (!botId.value) return true
-    try {
-      const result = await bots.pollQr(botId.value)
-      qrMessage.value = result.message ?? ''
-      if (result.qr.status === 'created') {
-        await finalize()
-        return true
-      }
-      if (result.qr.status === 'expired') return true
-      return false
-    } catch (error) {
-      qrErrorText.value = errorMessage(error, '轮询扫码状态失败')
-      return true
-    }
-  },
-  { interval: 2000, immediate: false },
-)
+const settingsName = ref('')
+const settingsModelId = ref('')
+const settingsEnabled = ref(false)
+const settingsStreaming = ref(false)
+const settingsCompressionMaxTurns = ref(10)
+const settingsCompressionStrategy = ref('truncate_by_turns')
+const advancedOpen = ref(false)
+const settingsSaving = ref(false)
+const settingsError = ref('')
+const models = ref<ModelProfile[]>([])
+const modelsLoading = ref(false)
 
-const qrAutoStarted = ref(false)
+const compressionStrategies = [
+  { title: '按轮次截断（truncate_by_turns）', value: 'truncate_by_turns' },
+  { title: 'LLM 总结压缩（llm_compress）', value: 'llm_compress' },
+]
+
+const appealOpen = ref(false)
+const appealing = ref(false)
+const appealSubmitted = ref(false)
 
 onMounted(async () => {
-  void loadVersion()
   await reload()
+  if (activeTab.value === 'settings') await enterSettings()
 })
 
-// 创建后跳转 ?qr=1 时自动发起扫码；用 watch 避免与异步 loadBot 竞态。
-watch(
-  bot,
-  async (value) => {
-    if (!value || qrAutoStarted.value) return
-    qrAutoStarted.value = true
-    if (value.qr) {
-      startPolling()
-      return
-    }
-    if (route.query.qr === '1' && value.status === 'pending_qr') {
-      await startQr()
-    }
-  },
-  { immediate: true },
-)
-
-onBeforeUnmount(() => {
-  stopPolling()
+watch(activeTab, async (tab) => {
+  if (tab === 'settings') await enterSettings()
 })
-
-async function loadVersion(): Promise<void> {
-  try {
-    const version = await getVersion()
-    devMode.value = version.dev_mode === true
-  } catch {
-    devMode.value = false
-  }
-}
-
-async function simulate(action: DevQrAction): Promise<void> {
-  if (!botId.value) return
-  try {
-    await devQrAction(action, botId.value)
-    const labels: Record<DevQrAction, string> = {
-      scanned: '已模拟扫码',
-      confirm: '已模拟确认',
-      expire: '已模拟过期（下次轮询将自动刷新）',
-    }
-    ui.notify(labels[action], 'info')
-    const result = await bots.pollQr(botId.value)
-    qrMessage.value = result.message ?? ''
-    if (result.qr.status === 'created') {
-      stopPolling()
-      await finalize()
-    } else if (result.qr.status === 'expired') {
-      stopPolling()
-    }
-  } catch (error) {
-    qrErrorText.value = errorMessage(error, '开发模式模拟失败')
-  }
-}
 
 async function reload(): Promise<void> {
   if (!botId.value) return
@@ -354,51 +372,12 @@ async function reload(): Promise<void> {
   }
 }
 
-async function startQr(): Promise<void> {
-  if (!botId.value || qrBusy.value) return
-  qrBusy.value = true
-  qrErrorText.value = ''
-  qrMessage.value = ''
-  try {
-    await bots.startQr(botId.value)
-    startPolling()
-  } catch (error) {
-    const apiError = toApiError(error)
-    if (apiError.code === 'qr_session_exists') {
-      try {
-        const result = await bots.pollQr(botId.value)
-        qrMessage.value = result.message ?? ''
-        startPolling()
-      } catch (pollError) {
-        qrErrorText.value = errorMessage(pollError, '恢复扫码会话失败')
-      }
-    } else if (apiError.code === 'bot_state_invalid') {
-      qrErrorText.value = '当前 Bot 状态不支持发起扫码；请稍后刷新或联系管理员。'
-    } else {
-      qrErrorText.value = apiError.message
-    }
-  } finally {
-    qrBusy.value = false
-  }
-}
-
-async function finalize(): Promise<void> {
-  if (!botId.value || finalizing.value) return
-  finalizing.value = true
-  try {
-    await bots.finalizeQr(botId.value)
-    qrMessage.value = ''
-    ui.notify('扫码成功，Bot 已上线', 'success')
-    await reload()
-  } catch (error) {
-    qrErrorText.value = errorMessage(error, '完成接入失败，请重试')
-  } finally {
-    finalizing.value = false
-  }
-}
-
 async function onToggleEnabled(value: boolean | null): Promise<void> {
   if (!bot.value || toggling.value) return
+  if (bot.value.admin_disabled) {
+    ui.notifyError('管理员已停用该 Bot，需先申诉恢复后才能操作。')
+    return
+  }
   toggling.value = true
   try {
     const updated = await bots.updateBot(bot.value.id, { enabled: value === true })
@@ -410,33 +389,85 @@ async function onToggleEnabled(value: boolean | null): Promise<void> {
   }
 }
 
-function openRename(): void {
-  renameName.value = bot.value?.name ?? ''
-  renameError.value = ''
-  renameOpen.value = true
+async function enterSettings(): Promise<void> {
+  if (!bot.value) return
+  hydrateSettings()
+  if (models.value.length) return
+  modelsLoading.value = true
+  try {
+    const result = await listModels()
+    models.value = result.items ?? []
+  } catch {
+    models.value = []
+  } finally {
+    modelsLoading.value = false
+  }
 }
 
-async function submitRename(): Promise<void> {
+function hydrateSettings(): void {
   if (!bot.value) return
-  const name = renameName.value.trim()
+  settingsName.value = bot.value.name
+  settingsModelId.value = bot.value.model_profile_id || ''
+  settingsEnabled.value = bot.value.enabled
+  settingsStreaming.value = bot.value.settings?.streaming ?? false
+  settingsCompressionMaxTurns.value = bot.value.settings?.compression_max_turns ?? 10
+  settingsCompressionStrategy.value =
+    bot.value.settings?.compression_overflow_strategy || 'truncate_by_turns'
+  settingsError.value = ''
+  advancedOpen.value = false
+}
+
+async function saveSettings(): Promise<void> {
+  if (!bot.value) return
+  settingsError.value = ''
+  const name = settingsName.value.trim()
   if (!name) {
-    renameError.value = '名称不能为空'
+    settingsError.value = '名称不能为空'
     return
   }
   if (name.length > 32) {
-    renameError.value = '名称最多 32 个字符'
+    settingsError.value = '名称最多 32 个字符'
     return
   }
-  renameSaving.value = true
-  renameError.value = ''
+  const turns = Number(settingsCompressionMaxTurns.value)
+  if (!Number.isInteger(turns) || turns < 1 || turns > 100) {
+    settingsError.value = '上下文压缩阈值需为 1–100 的整数'
+    advancedOpen.value = true
+    return
+  }
+  settingsSaving.value = true
   try {
-    await bots.updateBot(bot.value.id, { name })
-    renameOpen.value = false
-    ui.notify('名称已更新', 'success')
+    await bots.updateBot(bot.value.id, {
+      name,
+      model_profile_id: settingsModelId.value,
+      enabled: settingsEnabled.value,
+      settings: {
+        streaming: settingsStreaming.value,
+        compression_max_turns: turns,
+        compression_overflow_strategy: settingsCompressionStrategy.value,
+      },
+    })
+    hydrateSettings()
+    ui.notify('Bot 设置已保存', 'success')
   } catch (error) {
-    renameError.value = errorMessage(error, '改名失败')
+    settingsError.value = errorMessage(error, '保存 Bot 设置失败')
   } finally {
-    renameSaving.value = false
+    settingsSaving.value = false
+  }
+}
+
+async function submitBotAppeal(reason: string): Promise<void> {
+  if (!bot.value) return
+  appealing.value = true
+  try {
+    await submitAppeal({ target_type: 'bot', target_id: bot.value.id, reason })
+    appealOpen.value = false
+    appealSubmitted.value = true
+    ui.notify('Bot 启用申诉已提交，等待管理员处理', 'success')
+  } catch (error) {
+    ui.notifyError(errorMessage(error, '提交申诉失败'))
+  } finally {
+    appealing.value = false
   }
 }
 
@@ -458,6 +489,97 @@ async function onDelete(): Promise<void> {
 </script>
 
 <style scoped>
+.bot-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 40px;
+  margin: -8px 0 20px;
+  border-bottom: 1px solid var(--console-border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.bot-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.bot-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 8px 8px 0 0;
+  background: transparent;
+  color: var(--console-text-muted);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.bot-tab:hover {
+  color: var(--console-text);
+  background: rgba(60, 150, 202, 0.06);
+}
+
+.bot-tab:focus-visible {
+  outline: 2px solid var(--console-primary);
+  outline-offset: -2px;
+}
+
+.bot-tab--active {
+  color: rgb(var(--v-theme-primary));
+  background: rgba(60, 150, 202, 0.12);
+  box-shadow: inset 0 -2px 0 rgb(var(--v-theme-primary));
+}
+
+.settings-panel {
+  padding: 20px;
+}
+
+.advanced-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 40px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--console-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.advanced-title {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.advanced-sub {
+  font-size: 12px;
+}
+
+.advanced-body {
+  padding-top: 14px;
+}
+
+.advanced-note {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
 .detail-grid {
   display: grid;
   grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
@@ -534,6 +656,37 @@ async function onDelete(): Promise<void> {
   line-height: 1.6;
 }
 
+.settings-note {
+  margin: 6px 0 0;
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.rescan-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.rescan-title {
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.rescan-desc {
+  margin-top: 2px;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  max-width: 330px;
+}
+
+.admin-stop-reason {
+  margin-top: 4px;
+  font-size: 0.8rem;
+}
+
 .qr-head {
   display: flex;
   align-items: baseline;
@@ -602,7 +755,98 @@ async function onDelete(): Promise<void> {
 }
 
 @media (max-width: 959px) {
-  .detail-grid {
+  .bot-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 40px;
+  margin: -8px 0 20px;
+  border-bottom: 1px solid var(--console-border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.bot-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.bot-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 8px 8px 0 0;
+  background: transparent;
+  color: var(--console-text-muted);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.bot-tab:hover {
+  color: var(--console-text);
+  background: rgba(60, 150, 202, 0.06);
+}
+
+.bot-tab:focus-visible {
+  outline: 2px solid var(--console-primary);
+  outline-offset: -2px;
+}
+
+.bot-tab--active {
+  color: rgb(var(--v-theme-primary));
+  background: rgba(60, 150, 202, 0.12);
+  box-shadow: inset 0 -2px 0 rgb(var(--v-theme-primary));
+}
+
+.settings-panel {
+  padding: 20px;
+}
+
+.advanced-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 40px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--console-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.advanced-title {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.advanced-sub {
+  font-size: 12px;
+}
+
+.advanced-body {
+  padding-top: 14px;
+}
+
+.advanced-note {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.detail-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }

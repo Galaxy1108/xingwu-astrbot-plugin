@@ -34,7 +34,7 @@ export function formatSeconds(seconds: number): string {
 }
 
 export const platformLabels: Record<Platform, string> = {
-  weixin_oc: '微信（个人号 · 官方接口）',
+  weixin_oc: '微信（官方机器人）',
   qq_official: 'QQ 官方机器人',
 }
 

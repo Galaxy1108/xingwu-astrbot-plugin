@@ -131,6 +131,9 @@ class FakeAstrBot:
         }
         return conf_id
 
+    async def update_config(self, conf_id: str, patch: dict[str, Any]) -> None:
+        self.state.configs.setdefault(conf_id, {}).update(patch or {})
+
     async def delete_config(self, conf_id: str) -> None:
         self._maybe_fail("delete_config")
         self.state.configs.pop(conf_id, None)
@@ -155,6 +158,17 @@ class FakeAstrBot:
     async def delete_platform(self, bot_id: str) -> None:
         self._maybe_fail("delete_platform")
         self.state.platforms.pop(bot_id, None)
+
+    async def finalize_temp_platform(self, *, temp_id: str, bot_id: str) -> None:
+        self._maybe_fail("finalize_temp_platform")
+        temp = self.state.platforms.get(temp_id)
+        target = self.state.platforms.get(bot_id)
+        if temp is None or target is None:
+            raise ValueError(f"临时或目标平台不存在：{temp_id} -> {bot_id}")
+        for key, value in temp.items():
+            if key in {"id", "type", "enable"}:
+                continue
+            target[key] = value
 
     async def apply_credentials(
         self, *, bot_id: str, platform: str, credentials: dict[str, Any]

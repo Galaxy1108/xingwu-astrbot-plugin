@@ -64,6 +64,17 @@
 | `conflict` | 409 | 其他并发冲突 |
 | `insufficient_balance` | 409 | 预付费点数不足（`extra` 含 balance/points；M4 可开关） |
 | `upstream_error` | 502 | 上游模型/向量 API 探测失败（已脱敏） |
+| `already_redeemed` | 409 | 该用户已使用过此兑换码 |
+| `expired` / `exhausted` | 410 | 兑换码已过期 / 次数用尽 |
+| `invalid` / `disabled` | 400 | 兑换码不存在 / 已被禁用 |
+| `password_not_set` | 400 | 该账号未设置密码（请用邮箱验证码登录） |
+| `invalid_credentials` | 401/400 | 登录密码错误 / 修改密码时当前密码错误 |
+| `username_taken` | 409 | 用户名已被占用 |
+| `email_taken` | 409 | 邮箱已绑定其他账号 |
+| `last_login_method` | 400 | 解绑第三方登录前需先设置密码或验证邮箱 |
+| `oauth_disabled` / `oauth_not_bound` | 400 | 提供商未配置 / 该第三方账号未绑定 |
+| `oauth_already_bound` | 409 | 该第三方账号已绑定其他用户 |
+| `oauth_state_invalid` / `oauth_state_expired` | 400 | OAuth state 无效/过期 |
 | `internal_error` | 500 | 服务端错误（不泄露堆栈） |
 
 ## 1. 认证
@@ -135,7 +146,23 @@
 { "display_name": "小明" }
 ```
 
-`200 { "user": { ... } }`；用户名 1–32 字符，写审计。
+`200 { "user": { ... } }`；display_name 1–32 字符、username 唯一（3–32，字母数字/下划线/中划线），写审计。
+
+### 密码 / 邮箱绑定 / OAuth
+
+- `POST /api/auth/password/register` `{invite, username, password, display_name?}` → 无邮箱账号 + session（`recovery_available:false`）。
+- `POST /api/auth/password/login` `{identifier, password}` → session；identifier 含 @ 按邮箱，否则按用户名；封禁用户也可登录（进入申诉流程）。
+- `POST /api/auth/password/reset/request` `{email}` → 通用返回；仅已验证邮箱会收到重置验证码。
+- `POST /api/auth/password/reset` `{email, code, password}` → 更新密码并吊销全部会话。
+- `POST /api/auth/email/bind/request` `{email}`（登录）→ 发送绑定验证码；`POST /api/auth/email/bind` `{email, code}` → 设置邮箱并标记已验证。
+- `POST /api/me/password` `{current_password?, new_password}`；已有密码必须提供 current。
+- Bot 设置：`PATCH /api/bots/{id}` 支持 `settings:{streaming:bool, compression_max_turns:1–100, compression_overflow_strategy:"truncate_by_turns"|"llm_compress"}`；返回 Bot 的 `settings`，并同步写入该 Bot 的 AstrBot 配置文件。
+- `GET /api/auth/oauth/providers` → `[{id:"github",name,enabled}]`。
+- `GET /api/auth/oauth/{provider}/start?mode=login|register|bind&invite=&redirect=` → `{authorize_url,state}`。
+- `GET /api/auth/oauth/{provider}/callback?code=&state=` → 302 `/console/oauth/callback?ok=1&next=...`（失败 `?error=`）或 JSON（Accept）。
+- `GET /api/me/oauth`、`POST /api/me/oauth/{provider}/unbind`。
+- `/api/me.user` 新字段：`username/email_verified/has_password/recovery_available`；占位邮箱（`u_...@no-email.local`）对外返回空字符串。
+- 密码策略 6–128 字符；OAuth state 10 分钟、一次性。
 
 ## 2. 模板（用户可见）
 
@@ -280,7 +307,17 @@ Memory 对象：
 - 管理端同上，但需内容确认：`POST /api/admin/bots/{id}/memories/import`
 - `POST /api/bots/{id}/memories/import` → M2 暂 501（导入走 CLI：`saas/memory/migration/from_angel.py`）
 
-## 3.2 记忆笔记（天使之魂对标）
+## 3.2 扫码会话（扫码成功后才创建 Bot）
+
+- `POST /api/qr/sessions` `{platform,name,template_id}`（登录）→ `{session:{id,status,qr},qr}`；
+  仅创建临时平台 `qrs_<id>` + `qr_sessions` 行，**不写 bots**。
+- `GET /api/qr/sessions/{id}/poll` → 会话+二维码（pending/scanned/confirmed/expired）。
+- `POST /api/qr/sessions/{id}/finalize` → 仅 confirmed 时创建正式 Bot、迁移凭据/绑定/启用，返回 `{bot}`。
+- `DELETE /api/qr/sessions/{id}` → 取消并清理临时平台。
+- 兼容：旧 `POST /api/bots` + `/api/bots/{id}/qr/*` 保留，但控制台不再使用。
+- 统计/列表只包含已成功创建（finalize）的 Bot。
+
+## 3.3 记忆笔记（天使之魂对标）
 
 - `GET/POST /api/bots/{id}/notes?page=&page_size=&tag=&q=` → 笔记列表/新建（`{title,content,tags[]}`）
 - `GET/PATCH/DELETE /api/bots/{id}/notes/{short_id}` → 详情/编辑/软删
@@ -290,7 +327,16 @@ Memory 对象：
 - 记忆字段新增：`memory_type`(knowledge/preference/relationship/event/emotion/note)、`strength`(0–100)、
   `access_count`、`last_decay_at`；旧 `kind=fact` 视为 `knowledge`。
 
-## 3.3 记忆 API 设置（管理员）
+## 3.4 对话历史与分享
+
+- `GET /api/bots/{id}/conversations?page=&page_size=` → 本人 Bot 的会话列表（id/title/message_count/时间）。
+- `GET /api/bots/{id}/conversations/{cid}` → 本人解密后的 `{conversation:{history,...}}`；不写管理员访问日志。
+- `POST /api/bots/{id}/conversations/{cid}/share` `{expires_hours?}` → `{share:{token,url,expires_at}}`（0/缺省永久，有效期内复用）。
+- `GET/DELETE …/share` → 查询/撤销。
+- `GET /api/public/conversations/{token}`（公开，无需登录）→ 只读分享；过期 410 `share_expired`，不存在/撤销 404。
+- Bot 工具 `chat_history_search(query,limit)`：按当前 Bot 检索聊天记录（中文子串/多关键词），fail-closed。
+
+## 3.5 记忆 API 设置（管理员）
 
 - `GET/PUT /api/admin/settings/memory`：`embedding/rerank/behavior` 三段；GET 中 `api_key` 掩码、
   `has_api_key` 标识；PUT 为深合并，`"••••••••"` 表示保持，`""` 表示清除。
@@ -298,6 +344,10 @@ Memory 对象：
   `{ok,dim|count,message,latency_ms,model}`；失败 502 `upstream_error`（脱敏）。
 - 未配置时检索回退 FTS + 规则重排；配置 embedding 后启用向量候选 + RRF，配置 rerank 后对候选重排
   （失败回退规则，不影响可用性）。
+- `GET /api/admin/settings/memory/status` → `{embedding,rerank,fts,behavior}`；每项 state=ok/degraded/unconfigured，
+  含 last_ok/last_checked/last_error/latency_ms；FTS 常驻可用。
+- behavior 额外字段：`auto_inject`（主动注入，默认 true）、`auto_extract`（自动记忆，默认 true）。
+- 记忆重要度 1–6；**6 = 总是注入**（每轮对话无论检索是否命中都会注入，pinned 同效）。
 
 ## 4. 额度 / 访问记录（本期只读，M1 返回空数据）
 
@@ -306,6 +356,9 @@ Memory 对象：
 - `GET /api/wallet/ledger?page=1` → `{ "items": [{id,delta,type,ref,note,created_at}], "total": 0, "page": 1, "page_size": 20 }`
 - `GET /api/access-log?page=1` → `{ "items": [], "total": 0, "page": 1, "page_size": 20 }`
 - `GET /api/models` → `{items:[{id,name,provider,model,points_per_1k_input,points_per_1k_output,currency,note,...}]}`（仅 enabled，不含 key/base_url）
+- `POST /api/me/redeem` `{ "code": "SAAS-XXXX-XXXX" }` → `{code,points,credits,balance}`
+  - 原子事务：兑换记录 + `ledger(type=grant, ref=redeem:{code})` + 钱包 + 审计；错误见 §0.3。
+  - 产品语义：内测仅支持兑换码，不接在线支付/自动充值。
 - `GET /api/me/usage?page=&page_size=` → `{items,total,page,page_size,summary}`（summary 为近 30 天 tokens/points）
 - `GET /api/me/usage/daily?days=30&bot_id=` → `{days,start,end,bot_id,total_points,total_tokens,total_requests,points:[{date,points,tokens,requests}]}`
   - 控制台「点数消耗」图使用该接口：展示**每日消耗**（不是余额变化），支持按 Bot 过滤。
@@ -327,7 +380,15 @@ Memory 对象：
 - 用户侧 `GET /api/access-log` 可看到这些访问记录。
 - `GET/PUT /api/admin/users/{id}/encryption`：GET 同用户状态；PUT 只允许 `{enabled:true}`（强制开启），关闭返回 403。
 
-## 5.0 模型与定价 / 用量（管理员）
+## 5.0 用户详情
+
+- `GET /api/admin/users/{id}` → 用户（含 display_name/encryption）、`wallet`、`quota`、
+  `bots[]`、`usage:{summary30d,by_bot[]}`、`recent_ledger[]`（顶层与 `user` 内均暴露，兼容前端）。
+- `GET /api/admin/users/{id}/usage?page=&page_size=` → 该用户用量分页 + 30 天 summary。
+- `PATCH /api/admin/users/{id}` `{quota:{max_bots,max_memories,monthly_tokens}}`：
+  三字段非负整数、部分更新，返回 `{user}`。
+
+## 5.0.1 模型与定价 / 用量（管理员）
 
 - `GET /api/admin/models?page=&page_size=&enabled=` → 分页模型目录（api_key 掩码 + has_api_key）
 - `POST /api/admin/models` → 201（name/model 必填；价格 ≥0 点/1K tokens；base_url http(s)）
@@ -338,6 +399,15 @@ Memory 对象：
   - `points = ceil(tokens_in/1000*in_price + tokens_out/1000*out_price)`；写 `usage_records` + `ledger(type=consume)`
     + 钱包余额 + `quotas.used_tokens`；幂等键重复不重复扣费；`billing.enforce_balance=true` 时余额不足 409。
 - `GET /api/admin/usage?user_id=&page=&page_size=` → 分页用量 + `summary`（30 天）
+
+## 4.9 兑换码（管理员生成，用户兑换）
+
+- `GET /api/admin/redemption-codes?page=&page_size=&status=` → 分页；status ∈ active/available/unused/used/exhausted/expired/disabled/revoked/all
+- `POST /api/admin/redemption-codes` `{points,note?,count?,max_uses?,expires_at?}`
+  - `points` 正整数，`count` 1–100，`max_uses` 1–1000，`expires_at=0` 永久；→ 201 `{codes:[...],count}`
+  - 兼容前端字段 `credits`、`quantity`。
+- `PATCH /api/admin/redemption-codes/{id|code}` `{disabled:true|false}`；`DELETE …` = 软禁用。
+- 手动充值订单接口保留为历史兼容，控制台不再使用。
 
 ## 5. 管理端（`role=admin`；否则 403）
 

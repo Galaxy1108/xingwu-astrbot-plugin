@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-VERSION = "0.4.0"
+VERSION = "0.5.0"
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -77,6 +77,10 @@ class Settings:
     smtp_from_name: str = "AstrBot 控制台"
     smtp_starttls: bool = True
     smtp_ssl: bool = False
+    # GitHub OAuth (empty client id/secret → provider disabled)
+    github_client_id: str = ""
+    github_client_secret: str = ""
+    github_redirect_uri: str = ""
     # Dev / testing
     dev_mode: bool = False
     otp_dev_echo: bool = False
@@ -170,6 +174,15 @@ class Settings:
         settings.astrbot_dashboard_url = _env_str(
             "SAAS_ASTRBOT_DASHBOARD_URL", settings.astrbot_dashboard_url
         )
+        settings.github_client_id = _env_str(
+            "SAAS_GITHUB_CLIENT_ID", settings.github_client_id
+        )
+        settings.github_client_secret = _env_str(
+            "SAAS_GITHUB_CLIENT_SECRET", settings.github_client_secret
+        )
+        settings.github_redirect_uri = _env_str(
+            "SAAS_GITHUB_REDIRECT_URI", settings.github_redirect_uri
+        )
         settings.smtp_host = _env_str("SAAS_SMTP_HOST", settings.smtp_host)
         settings.smtp_port = _env_int("SAAS_SMTP_PORT", settings.smtp_port)
         settings.smtp_user = _env_str("SAAS_SMTP_USER", settings.smtp_user)
@@ -220,6 +233,15 @@ class Settings:
         settings.admin_email = str(val("initial_admin_email", settings.admin_email))
         settings.astrbot_dashboard_url = str(
             val("astrbot_dashboard_url", settings.astrbot_dashboard_url)
+        )
+        settings.github_client_id = str(
+            val("github_client_id", settings.github_client_id)
+        )
+        settings.github_client_secret = str(
+            val("github_client_secret", settings.github_client_secret)
+        )
+        settings.github_redirect_uri = str(
+            val("github_redirect_uri", settings.github_redirect_uri)
         )
         settings.qr_ttl_seconds = int(val("qr_ttl_seconds", settings.qr_ttl_seconds))
         settings.qr_max_refreshes = int(

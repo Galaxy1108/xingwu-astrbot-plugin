@@ -17,6 +17,8 @@ export interface Quota {
   max_bots: number
   monthly_tokens: number
   max_memories: number
+  used_tokens?: number
+  used_memories?: number
 }
 
 export interface EncryptionInfo {
@@ -27,9 +29,16 @@ export interface EncryptionInfo {
 export interface User {
   id: string
   email: string
+  username?: string
   display_name: string
+  email_verified?: boolean
+  has_password?: boolean
+  recovery_available?: boolean
   role: Role
   status: UserStatus
+  status_reason?: string
+  status_changed_at?: number
+  pending_appeal?: boolean
   created_at: number
   encryption: EncryptionInfo
 }
@@ -70,6 +79,37 @@ export interface OtpVerifyResult {
   user: User
   is_new: boolean
   csrf_token: string
+}
+
+export interface PasswordSessionResult {
+  user: User
+  csrf_token: string
+  recovery_available?: boolean
+}
+
+export interface PasswordRegisterPayload {
+  invite: string
+  username: string
+  password: string
+  display_name?: string
+}
+
+export interface OAuthProvider {
+  id: string
+  name: string
+  enabled: boolean
+}
+
+export interface OAuthIdentity {
+  provider: string
+  login?: string
+  email?: string
+  created_at?: number
+}
+
+export interface OAuthStartResult {
+  authorize_url: string
+  state?: string
 }
 
 export interface MemoryDefaults {
@@ -129,6 +169,12 @@ export interface QrSession {
   interval: number
 }
 
+export interface BotSettings {
+  streaming: boolean
+  compression_max_turns: number
+  compression_overflow_strategy: string
+}
+
 export interface Bot {
   id: string
   name: string
@@ -143,6 +189,10 @@ export interface Bot {
   created_at: number
   updated_at: number
   last_active_at: number
+  model_profile_id?: string
+  admin_disabled?: boolean
+  admin_disabled_reason?: string
+  settings?: BotSettings
   qr: QrSession | null
 }
 
@@ -155,6 +205,15 @@ export interface BotCreatePayload {
 export interface BotPatchPayload {
   name?: string
   enabled?: boolean
+  model_profile_id?: string
+  settings?: Partial<BotSettings>
+}
+
+export interface QrConnectSession {
+  id: string
+  status: 'pending' | 'scanned' | 'confirmed' | 'expired'
+  qr: QrSession
+  message?: string
 }
 
 export interface QrPollResult {
@@ -167,6 +226,12 @@ export interface Wallet {
   currency: string
   /** 后端返回的账本重算余额（用于对账），不是流水条数。 */
   ledger_total?: number
+}
+
+export interface RedeemResult {
+  balance?: number
+  credits?: number
+  message?: string
 }
 
 export interface LedgerEntry {
@@ -291,6 +356,7 @@ export interface WalletUsage {
 
 export interface AdminUserPatch {
   status?: UserStatus
+  reason?: string
   quota?: Partial<Quota>
 }
 
@@ -335,6 +401,32 @@ export interface AdminLedgerAdjustPayload {
   idem_key?: string
 }
 
+export interface RedemptionCode {
+  code: string
+  credits: number
+  note?: string
+  used_count?: number
+  max_uses?: number
+  expires_at?: number | null
+  status?: string
+  disabled?: boolean
+  revoked_at?: number | null
+  created_at?: number
+}
+
+export interface RedemptionCodeCreatePayload {
+  credits: number
+  note?: string
+  quantity?: number
+  max_uses?: number
+  expires_at?: number
+}
+
+export interface RedemptionCodeCreateResult {
+  codes?: Array<string | RedemptionCode>
+  count?: number
+}
+
 export interface AdminLedgerAdjustResult {
   ledger: LedgerEntry
   idempotent: boolean
@@ -343,11 +435,116 @@ export interface AdminLedgerAdjustResult {
 
 export interface AdminBot extends Bot {
   owner_email: string
+  user_id?: string
+}
+
+export type AppealStatus = 'pending' | 'approved' | 'rejected'
+export type AppealTarget = 'user' | 'bot'
+
+export interface Appeal {
+  id: string | number
+  target_type: AppealTarget
+  target_id?: string
+  target_name?: string
+  user_id?: string
+  user_email?: string
+  reason: string
+  status: AppealStatus
+  note?: string
+  created_at: number
+  handled_at?: number
+  handled_by?: string
+}
+
+export interface NoteSummary {
+  id: number
+  short_id: string
+  title: string
+  tags: string[]
+  content_length: number
+  preview: string
+  created_at: number
+  updated_at: number
+}
+
+export interface NoteDetail extends NoteSummary {
+  content?: string
+}
+
+export interface NoteReadPage {
+  short_id: string
+  title: string
+  content: string
+  offset: number
+  limit: number
+  total_length: number
+  has_more: boolean
+  next_offset: number | null
+  note?: NoteSummary
+}
+
+export interface AdminUserUsageItem {
+  bot_id?: string
+  bot_name?: string
+  date?: string
+  points?: number
+  tokens?: number
+  requests?: number
+}
+
+export interface AdminUserUsageSummary {
+  days?: number
+  points?: number
+  tokens?: number
+  requests?: number
+}
+
+export interface AdminUserUsage {
+  summary?: AdminUserUsageSummary
+  by_bot?: AdminUserUsageItem[]
+  items?: AdminUserUsageItem[]
+  total?: number
+  page?: number
+  page_size?: number
+}
+
+export interface AdminUserDetail extends AdminUser {
+  bots?: AdminBot[]
+  recent_ledger?: LedgerEntry[]
+  ledger?: LedgerEntry[]
+  usage?: AdminUserUsage
 }
 
 export interface ConversationMessage {
   role: string
   content: string
+}
+
+export interface ConversationShare {
+  token: string
+  url: string
+  expires_at?: number | null
+  created_at?: number
+}
+
+export interface ConversationSummary {
+  id: string
+  title: string
+  message_count?: number
+  history?: ConversationMessage[] | null
+  created_at: number
+  updated_at?: number
+  shared?: boolean
+  share?: ConversationShare | null
+}
+
+export interface PublicConversation {
+  id?: string
+  title: string
+  messages: ConversationMessage[]
+  created_at: number
+  updated_at?: number
+  expires_at?: number | null
 }
 
 export interface AdminConversation {
@@ -461,6 +658,7 @@ export interface MemoryListQuery {
   kind?: string
   tag?: string
   q?: string
+  importance?: number | string
 }
 
 export interface MemoryPatch {
@@ -559,6 +757,28 @@ export interface MemoryBehaviorConfig {
   rerank_candidate_limit: number
   rrf_k: number
   recall_top_k: number
+  auto_inject?: boolean
+  auto_extract?: boolean
+}
+
+export interface MemoryProviderStatus {
+  state: string
+  enabled?: boolean
+  configured?: boolean
+  last_test_at?: number
+  last_tested_at?: number
+  last_checked?: number
+  last_ok?: boolean | null
+  latency_ms?: number
+  last_error?: string
+  message?: string
+}
+
+export interface MemorySettingsStatus {
+  embedding?: MemoryProviderStatus
+  rerank?: MemoryProviderStatus
+  fts?: { available?: boolean; mode?: string }
+  behavior?: MemoryBehaviorConfig
 }
 
 export interface MemorySettings {
@@ -620,4 +840,22 @@ export interface ModelProfileInput {
 
 export interface ModelProfileList {
   items: ModelProfile[]
+}
+
+export interface AdminInvite {
+  code_hint: string
+  max_uses: number
+  used_count: number
+  expires_at: number
+  revoked_at: number
+  created_at: number
+  created_by?: string
+  note?: string
+  status: 'active' | 'used' | 'expired' | 'revoked'
+}
+
+export interface AdminInviteCreatePayload {
+  max_uses?: number
+  ttl_hours?: number
+  note?: string
 }

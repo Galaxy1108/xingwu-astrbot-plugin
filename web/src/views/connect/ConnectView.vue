@@ -1,8 +1,8 @@
 <template>
   <div>
     <PageHeader
-      title="扫码接入"
-      description="选择平台并命名，生成二维码后用对应 App 扫码确认；成功后 Bot 会自动上线。"
+      title="添加机器人"
+      description="选择平台、命名并生成二维码，用对应 App 扫码确认；成功后机器人会自动上线。"
       back-to="/bots"
     >
       <template #actions>
@@ -98,6 +98,9 @@
           </div>
         </template>
       </v-select>
+      <p class="template-copy-note text-muted">
+        创建时会复制所选模板的配置，之后可在 Bot 设置中调整，不影响模板本身。
+      </p>
 
       <v-btn
         color="primary"
@@ -111,7 +114,7 @@
         创建并生成二维码
       </v-btn>
       <p class="form-note text-muted">
-        创建后会生成一个禁用态的 Bot；扫码成功后自动启用。若中途取消，可到「我的 Bot」删除。
+        扫码成功前不会创建机器人；中途退出会取消本次扫码会话，不会留下未配置的 Bot。
       </p>
     </v-card>
 
@@ -130,7 +133,7 @@
             <div>
               <h2 class="section-title qr-summary-title">扫码接入</h2>
               <p class="text-muted qr-summary-line">
-                {{ createdBot?.name || name }} · {{ platformShortLabel(platform) }} · {{ selectedTemplateName }}
+                {{ name }} · {{ platformShortLabel(platform) }} · {{ selectedTemplateName }}
               </p>
             </div>
           </div>
@@ -139,50 +142,28 @@
         <div class="alert-row">
           <span>{{ qrErrorText }}</span>
           <div class="alert-actions">
-            <v-btn size="small" variant="text" color="error" :loading="qrBusy" @click="startQr">
+            <v-btn size="small" variant="text" color="error" :loading="qrBusy" @click="regenerate">
               重试
             </v-btn>
-            <v-btn v-if="botId" size="small" variant="text" :to="`/bots/${botId}`">查看 Bot</v-btn>
           </div>
         </div>
       </v-alert>
 
       <QrPanel
         v-if="qr"
-        :status="qr.status"
+        :status="qrPanelStatus"
         :image="qr.qr_image"
         :expires-at="qr.expires_at"
         :refresh-count="qr.refresh_count"
         :message="qrMessage"
         :busy="qrBusy"
-        @regenerate="startQr"
+        @regenerate="regenerate"
       />
 
       <div v-else-if="!qrErrorText" class="qr-loading">
         <v-progress-circular indeterminate color="primary" />
         <span class="text-muted">正在生成二维码…</span>
       </div>
-
-      <v-alert
-        v-if="devMode && botId && qr"
-        type="info"
-        variant="tonal"
-        density="compact"
-        class="mt-4"
-      >
-        <div class="dev-box">
-          <span>开发模式：模拟扫码状态机（仅 dev server 可见）</span>
-          <div class="dev-actions">
-            <v-btn size="small" variant="tonal" @click="simulate('scanned')">模拟已扫码</v-btn>
-            <v-btn size="small" variant="tonal" color="success" @click="simulate('confirm')">
-              模拟确认登录
-            </v-btn>
-            <v-btn size="small" variant="tonal" color="warning" @click="simulate('expire')">
-              模拟过期
-            </v-btn>
-          </div>
-        </div>
-      </v-alert>
 
       <div class="qr-footer">
         <v-btn variant="text" @click="cancelFlow">取消并返回列表</v-btn>
@@ -193,7 +174,7 @@
           <v-icon size="64" color="success">mdi-check-decagram-outline</v-icon>
           <h2 class="done-title">已接入</h2>
           <p class="text-muted done-desc">
-            「{{ finishedBot?.name || createdBot?.name || name }}」已完成扫码，正在上线（通常 5 秒内生效）。
+            「{{ finishedBot?.name || name }}」已完成扫码，正在上线（通常 5 秒内生效）。
           </p>
           <div class="done-actions">
             <v-btn color="primary" :to="finishedBot ? `/bots/${finishedBot.id}` : '/bots'" variant="tonal">
@@ -235,19 +216,21 @@ import { useDisplay } from 'vuetify'
 import PageHeader from '@/components/PageHeader.vue'
 import QrPanel from '@/components/QrPanel.vue'
 import { usePolling } from '@/composables/usePolling'
-import { useBotsStore } from '@/stores/bots'
 import { useUiStore } from '@/stores/ui'
 import { listTemplates } from '@/api/wallet'
-import { getVersion } from '@/api/system'
-import { devQrAction, type DevQrAction } from '@/api/dev'
+import {
+  cancelQrSession,
+  createQrSession,
+  finalizeQrSession,
+  pollQrSession,
+} from '@/api/qr'
 import { toApiError } from '@/api/client'
-import type { Bot, Platform, Template } from '@/types'
-import { errorMessage, fieldError } from '@/utils/errors'
+import type { Bot, Platform, QrConnectSession, QrStatus, Template } from '@/types'
+import { errorMessage } from '@/utils/errors'
 import { platformShortLabel } from '@/utils/format'
 
 const router = useRouter()
 const { smAndDown: isMobile } = useDisplay()
-const bots = useBotsStore()
 const ui = useUiStore()
 
 const step = ref<'form' | 'qr' | 'done'>('form')
@@ -262,20 +245,20 @@ const templates = ref<Template[]>([])
 const templatesLoading = ref(false)
 const templatesError = ref('')
 
-const botId = ref('')
-const createdBot = ref<Bot | null>(null)
+const session = ref<QrConnectSession | null>(null)
 const finishedBot = ref<Bot | null>(null)
 const qrBusy = ref(false)
 const qrMessage = ref('')
 const qrErrorText = ref('')
 const finalizing = ref(false)
-const devMode = ref(false)
 
-const qr = computed(() => bots.qr)
+const qr = computed(() => session.value?.qr ?? null)
+const qrPanelStatus = computed<QrStatus>(() => {
+  if (session.value?.status === 'confirmed') return 'created'
+  return (session.value?.status ?? 'pending') as QrStatus
+})
 const selectedTemplate = computed(() => templates.value.find((item) => item.id === templateId.value))
-const selectedTemplateName = computed(
-  () => selectedTemplate.value?.name || createdBot.value?.template_name || '—',
-)
+const selectedTemplateName = computed(() => selectedTemplate.value?.name || '—')
 
 const platformOptions: Array<{
   value: Platform
@@ -285,8 +268,8 @@ const platformOptions: Array<{
 }> = [
   {
     value: 'weixin_oc',
-    title: '微信（个人号 · 官方接口）',
-    description: '通过官方接口登录微信个人号，扫码后在手机确认。',
+    title: '微信（官方机器人）',
+    description: '通过微信官方机器人接口接入，扫码后在手机确认。',
     icon: 'mdi-wechat',
   },
   {
@@ -297,19 +280,18 @@ const platformOptions: Array<{
   },
 ]
 
-let redirectTimer: ReturnType<typeof setTimeout> | null = null
-
 const { start: startPolling, stop: stopPolling } = usePolling(
   async () => {
-    if (!botId.value) return true
+    if (!session.value) return true
     try {
-      const result = await bots.pollQr(botId.value)
-      qrMessage.value = result.message ?? ''
-      if (result.qr.status === 'created') {
+      const result = await pollQrSession(session.value.id)
+      session.value = result.session
+      qrMessage.value = result.session.message ?? ''
+      if (result.session.status === 'confirmed') {
         await finalize()
         return true
       }
-      if (result.qr.status === 'expired') return true
+      if (result.session.status === 'expired') return true
       return false
     } catch (error) {
       qrErrorText.value = errorMessage(error, '轮询扫码状态失败')
@@ -321,12 +303,11 @@ const { start: startPolling, stop: stopPolling } = usePolling(
 
 onMounted(() => {
   void loadTemplates()
-  void loadVersion()
 })
 
 onBeforeUnmount(() => {
   stopPolling()
-  if (redirectTimer !== null) clearTimeout(redirectTimer)
+  if (session.value) void cancelQrSession(session.value.id).catch(() => undefined)
 })
 
 async function loadTemplates(): Promise<void> {
@@ -342,15 +323,6 @@ async function loadTemplates(): Promise<void> {
     templatesError.value = errorMessage(error, '加载模板失败')
   } finally {
     templatesLoading.value = false
-  }
-}
-
-async function loadVersion(): Promise<void> {
-  try {
-    const version = await getVersion()
-    devMode.value = version.dev_mode === true
-  } catch {
-    devMode.value = false
   }
 }
 
@@ -373,88 +345,71 @@ async function onCreate(): Promise<void> {
 
   creating.value = true
   try {
-    const bot = await bots.createBot({
+    const result = await createQrSession({
+      platform: platform.value,
       name: botName,
       template_id: templateId.value,
-      platform: platform.value,
     })
-    createdBot.value = bot
-    botId.value = bot.id
+    session.value = result.session
     step.value = 'qr'
-    await startQr()
+    startPolling()
   } catch (error) {
     const apiError = toApiError(error)
-    if (fieldError(apiError, 'name')) nameError.value = apiError.message
-    formError.value = apiError.message
+    formError.value =
+      apiError.status === 404 || apiError.status === 405
+        ? '添加机器人功能暂未开放（后端接口未就绪），请稍后再试。'
+        : errorMessage(apiError, '创建扫码会话失败')
   } finally {
     creating.value = false
   }
 }
 
-async function startQr(): Promise<void> {
-  if (!botId.value || qrBusy.value) return
-  qrBusy.value = true
-  qrErrorText.value = ''
-  qrMessage.value = ''
-  try {
-    await bots.startQr(botId.value)
-    startPolling()
-  } catch (error) {
-    const apiError = toApiError(error)
-    if (apiError.code === 'qr_session_exists') {
-      try {
-        const result = await bots.pollQr(botId.value)
-        qrMessage.value = result.message ?? ''
-        startPolling()
-      } catch (pollError) {
-        qrErrorText.value = errorMessage(pollError, '恢复扫码会话失败')
-      }
-    } else {
-      qrErrorText.value = apiError.message
+async function regenerate(): Promise<void> {
+  if (qrBusy.value) return
+  if (session.value) {
+    const current = session.value.id
+    session.value = null
+    stopPolling()
+    try {
+      await cancelQrSession(current)
+    } catch {
+      /* ignore */
     }
-  } finally {
-    qrBusy.value = false
   }
+  step.value = 'form'
+  await onCreate()
 }
 
 async function finalize(): Promise<void> {
-  if (!botId.value || finalizing.value) return
+  if (!session.value || finalizing.value) return
   finalizing.value = true
+  qrBusy.value = true
   try {
-    const bot = await bots.finalizeQr(botId.value)
-    finishedBot.value = bot
+    const result = await finalizeQrSession(session.value.id)
+    finishedBot.value = result.bot
+    session.value = null
     step.value = 'done'
-    ui.notify('扫码成功，Bot 已上线', 'success')
-    redirectTimer = setTimeout(() => {
-      void router.push(`/bots/${bot.id}`)
+    stopPolling()
+    ui.notify('扫码成功，机器人已上线', 'success')
+    setTimeout(() => {
+      void router.push(`/bots/${result.bot.id}`)
     }, 2000)
   } catch (error) {
     qrErrorText.value = errorMessage(error, '完成接入失败，请重试')
   } finally {
     finalizing.value = false
+    qrBusy.value = false
   }
 }
 
-async function simulate(action: DevQrAction): Promise<void> {
-  if (!botId.value) return
-  try {
-    await devQrAction(action, botId.value)
-    const labels: Record<DevQrAction, string> = {
-      scanned: '已模拟扫码',
-      confirm: '已模拟确认',
-      expire: '已模拟过期（下次轮询将自动刷新）',
-    }
-    ui.notify(labels[action], 'info')
-    const result = await bots.pollQr(botId.value)
-    qrMessage.value = result.message ?? ''
-  } catch (error) {
-    qrErrorText.value = errorMessage(error, '开发模式模拟失败')
-  }
-}
-
-function cancelFlow(): void {
+async function cancelFlow(): Promise<void> {
   stopPolling()
-  void router.push('/bots')
+  if (session.value) {
+    const current = session.value.id
+    session.value = null
+    await cancelQrSession(current).catch(() => undefined)
+  }
+  await router.push('/bots')
 }
 </script>
 
@@ -639,6 +594,12 @@ function cancelFlow(): void {
   font-size: 0.78rem;
   color: var(--console-text-muted);
   line-height: 1.55;
+}
+
+.template-copy-note {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
 }
 
 .template-hint {

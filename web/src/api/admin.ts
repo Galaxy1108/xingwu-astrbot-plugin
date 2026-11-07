@@ -1,4 +1,4 @@
-import { api } from './client'
+import { api, isApiError } from './client'
 import type {
   AdminBot,
   AdminConversationList,
@@ -8,9 +8,13 @@ import type {
   AdminOrderConfirmResult,
   AdminOrderCreatePayload,
   AdminOrderCreateResult,
+  AdminInvite,
+  AdminInviteCreatePayload,
   AdminOverview,
   AdminUser,
+  AdminUserDetail,
   AdminUserPatch,
+  AdminUserUsage,
   AdminUserQuery,
   ConfProfile,
   AuditLog,
@@ -18,12 +22,18 @@ import type {
   Bot,
   MemoryExportResult,
   MemoryImportReport,
+  NoteReadPage,
+  NoteSummary,
+  RedemptionCode,
+  RedemptionCodeCreatePayload,
+  RedemptionCodeCreateResult,
   MemoryItem,
   MemoryListQuery,
   MemoryPatch,
   MemorySettings,
   MemorySettingsKind,
   MemorySettingsPatch,
+  MemorySettingsStatus,
   MemorySettingsTestResult,
   ModelProfile,
   ModelProfileInput,
@@ -74,8 +84,21 @@ export function listAdminBots(): Promise<{ items: AdminBot[] }> {
   return api.get<{ items: AdminBot[] }>('/admin/bots')
 }
 
-export function disableAdminBot(id: string): Promise<{ bot: Bot }> {
-  return api.post<{ bot: Bot }>(`/admin/bots/${encodeURIComponent(id)}/disable`)
+export async function disableAdminBot(
+  id: string,
+  reason = '',
+): Promise<{ bot: Bot }> {
+  try {
+    return await api.patch<{ bot: Bot }>(`/admin/bots/${encodeURIComponent(id)}`, {
+      disabled: true,
+      reason,
+    })
+  } catch (error) {
+    if (isApiError(error) && (error.status === 404 || error.status === 405)) {
+      return api.post<{ bot: Bot }>(`/admin/bots/${encodeURIComponent(id)}/disable`)
+    }
+    throw error
+  }
 }
 
 export function deleteAdminBot(id: string, confirmName: string): Promise<{ deleted: boolean }> {
@@ -151,6 +174,7 @@ export function listAdminBotMemories(
     page_size: query.page_size,
     kind: query.kind,
     q: query.q,
+    importance: query.importance,
   }
   if (confirm) params.confirm = 1
   return api.get<PageResult<MemoryItem>>(
@@ -210,6 +234,10 @@ export function getMemorySettings(): Promise<MemorySettings> {
   return api.get<MemorySettings>('/admin/settings/memory')
 }
 
+export function getMemorySettingsStatus(): Promise<MemorySettingsStatus> {
+  return api.get<MemorySettingsStatus>('/admin/settings/memory/status')
+}
+
 export function updateMemorySettings(
   payload: MemorySettingsPatch,
 ): Promise<MemorySettings> {
@@ -246,4 +274,110 @@ export function updateAdminModel(
 /** 删除即软禁用（enabled=false），保留历史用量/定价。 */
 export function deleteAdminModel(id: string): Promise<{ deleted: boolean }> {
   return api.delete<{ deleted: boolean }>(`/admin/models/${encodeURIComponent(id)}`)
+}
+
+// ------------------------------------------------------------------ 兑换码
+export function listRedemptionCodes(
+  params: { page?: number; page_size?: number } = {},
+): Promise<PageResult<RedemptionCode>> {
+  return api.get<PageResult<RedemptionCode>>('/admin/redemption-codes', {
+    page: params.page,
+    page_size: params.page_size,
+  })
+}
+
+export function createRedemptionCodes(
+  payload: RedemptionCodeCreatePayload,
+): Promise<RedemptionCodeCreateResult> {
+  return api.post<RedemptionCodeCreateResult>('/admin/redemption-codes', payload)
+}
+
+/** 禁用兑换码；兼容 POST .../{code}/disable 与 DELETE 两种实现。 */
+export async function disableRedemptionCode(code: string): Promise<{ disabled?: boolean }> {
+  try {
+    return await api.post<{ disabled?: boolean }>(
+      `/admin/redemption-codes/${encodeURIComponent(code)}/disable`,
+    )
+  } catch (error) {
+    if (isApiError(error) && error.status === 404) {
+      return api.delete<{ disabled?: boolean }>(
+        `/admin/redemption-codes/${encodeURIComponent(code)}`,
+      )
+    }
+    throw error
+  }
+}
+
+// ------------------------------------------------------------------ 用户详情（M4）
+export function getAdminUser(
+  id: string,
+): Promise<AdminUserDetail | { user: AdminUserDetail }> {
+  return api.get<AdminUserDetail | { user: AdminUserDetail }>(
+    `/admin/users/${encodeURIComponent(id)}`,
+  )
+}
+
+export function getAdminUserUsage(
+  id: string,
+  page = 1,
+  pageSize = 20,
+): Promise<AdminUserUsage> {
+  return api.get<AdminUserUsage>(`/admin/users/${encodeURIComponent(id)}/usage`, {
+    page,
+    page_size: pageSize,
+  })
+}
+
+// ------------------------------------------------------------------ 管理端笔记
+export function listAdminBotNotes(
+  botId: string,
+  query: { page?: number; page_size?: number; q?: string; tag?: string } = {},
+  confirm = false,
+): Promise<PageResult<NoteSummary>> {
+  const params: Record<string, string | number | undefined> = {
+    page: query.page,
+    page_size: query.page_size,
+    q: query.q,
+    tag: query.tag,
+  }
+  if (confirm) params.confirm = 1
+  return api.get<PageResult<NoteSummary>>(
+    `/admin/bots/${encodeURIComponent(botId)}/notes`,
+    params,
+  )
+}
+
+export function readAdminBotNote(
+  botId: string,
+  shortId: string,
+  confirm = false,
+): Promise<NoteReadPage> {
+  return api.get<NoteReadPage>(
+    `/admin/bots/${encodeURIComponent(botId)}/notes/${encodeURIComponent(shortId)}${confirm ? '?confirm=1' : ''}`,
+  )
+}
+
+export function deleteAdminBotNote(
+  botId: string,
+  shortId: string,
+  confirm = false,
+): Promise<{ deleted: boolean }> {
+  return api.delete<{ deleted: boolean }>(
+    `/admin/bots/${encodeURIComponent(botId)}/notes/${encodeURIComponent(shortId)}${confirm ? '?confirm=1' : ''}`,
+  )
+}
+
+
+export function listAdminInvites(page = 1, pageSize = 50): Promise<PageResult<AdminInvite>> {
+  return api.get<PageResult<AdminInvite>>('/admin/invites', { page, page_size: pageSize })
+}
+
+export function createAdminInvite(
+  payload: AdminInviteCreatePayload,
+): Promise<{ invite: AdminInvite & { code: string } }> {
+  return api.post<{ invite: AdminInvite & { code: string } }>('/admin/invites', payload)
+}
+
+export function revokeAdminInvite(codeHint: string): Promise<{ revoked: boolean }> {
+  return api.delete<{ revoked: boolean }>(`/admin/invites/${encodeURIComponent(codeHint)}`)
 }

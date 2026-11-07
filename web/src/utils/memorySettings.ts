@@ -41,6 +41,8 @@ export interface BehaviorFormState {
   rerank_candidate_limit: number
   rrf_k: number
   recall_top_k: number
+  auto_inject: boolean
+  auto_extract: boolean
 }
 
 export type FormErrors = Record<string, string>
@@ -71,6 +73,8 @@ export const defaultBehavior: MemoryBehaviorConfig = {
   rerank_candidate_limit: 30,
   rrf_k: 60,
   recall_top_k: 5,
+  auto_inject: true,
+  auto_extract: true,
 }
 
 function toInt(value: unknown, fallback: number): number {
@@ -147,6 +151,8 @@ export function behaviorFormFrom(config: MemoryBehaviorConfig): BehaviorFormStat
     ),
     rrf_k: toInt(config.rrf_k, defaultBehavior.rrf_k),
     recall_top_k: toInt(config.recall_top_k, defaultBehavior.recall_top_k),
+    auto_inject: toBool(config.auto_inject, true),
+    auto_extract: toBool(config.auto_extract, true),
   }
 }
 
@@ -214,6 +220,8 @@ export function buildBehaviorPayload(form: BehaviorFormState): MemoryBehaviorCon
     ),
     rrf_k: toInt(form.rrf_k, defaultBehavior.rrf_k),
     recall_top_k: toInt(form.recall_top_k, defaultBehavior.recall_top_k),
+    auto_inject: form.auto_inject !== false,
+    auto_extract: form.auto_extract !== false,
   }
 }
 

@@ -5,11 +5,21 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+from .appeals import AppealService
 from .audit import AuditService
+from .bans import BanService
 from .billing import BillingService
+from .conversation_shares import ConversationShareService
 from .conversations import ConversationService, FakeConversationBackend
 from .encryption import EncryptionService
-from .auth import AuthService, InviteService, OtpService, SessionService, TenantKeyService
+from .auth import (
+    AuthService,
+    InviteService,
+    OAuthService,
+    OtpService,
+    SessionService,
+    TenantKeyService,
+)
 from .bots import BotService
 from .clock import Clock, SystemClock
 from .config import Settings
@@ -18,6 +28,8 @@ from .db import Database
 from .fake_astrbot import FakeAstrBot
 from .mailer import build_mailer
 from .metering import MeteringService
+from .redemption import RedemptionService
+from .usage_bridge import UsageBridge
 from .model_catalog import ModelCatalogService
 from .memory.api import MemoryAPI
 from .memory.extraction.command import CommandExtractor
@@ -26,6 +38,7 @@ from .memory.storage.sqlcipher import MemoryStorage, MemoryStorageError
 from .memory.store import SqlCipherMemoryStore
 from .ports import AstrBotPort
 from .qr import QrService
+from .qr_sessions import QrSessionService
 from .settings_store import SettingsStore
 from .templates import TemplateService
 
@@ -43,6 +56,7 @@ class Container:
         clock: Clock | None = None,
         memory_plaintext: bool = False,
         conversation_backend=None,
+        oauth_client=None,
     ) -> None:
         self.settings = settings
         self.settings.ensure_dirs()
@@ -86,6 +100,16 @@ class Container:
             mailer=self.mailer,
             clock=self.clock,
         )
+        self.oauth = OAuthService(
+            self.db,
+            settings=settings,
+            auth=self.auth,
+            invites=self.invites,
+            sessions=self.sessions,
+            audit=self.audit,
+            clock=self.clock,
+            client=oauth_client,
+        )
         self.settings_store = SettingsStore(self.db, self.key_manager, self.clock)
         self.templates = TemplateService(self.db, self.clock)
         self.models = ModelCatalogService(
@@ -98,6 +122,10 @@ class Container:
             settings_store=self.settings_store,
             catalog=self.models,
         )
+        self.redemptions = RedemptionService(
+            self.db, audit=self.audit, clock=self.clock
+        )
+        self.usage_bridge = UsageBridge(self)
         self.billing = BillingService(self.db, audit=self.audit, clock=self.clock)
         self.memory_storage = MemoryStorage(
             settings.memory_dir, force_plaintext=memory_plaintext
@@ -126,6 +154,16 @@ class Container:
             audit=self.audit,
             clock=self.clock,
         )
+        self.bans = BanService(
+            self.db,
+            auth=self.auth,
+            bots=self.bots,
+            audit=self.audit,
+            clock=self.clock,
+        )
+        self.appeals = AppealService(
+            self.db, audit=self.audit, clock=self.clock, bans=self.bans
+        )
         self.conversations = ConversationService(
             self.conversation_backend,
             db=self.db,
@@ -138,6 +176,17 @@ class Container:
             settings=settings,
             audit=self.audit,
             clock=self.clock,
+        )
+        self.qr_sessions = QrSessionService(
+            self.db,
+            bots=self.bots,
+            port=self.port,
+            settings=settings,
+            audit=self.audit,
+            clock=self.clock,
+        )
+        self.conversation_shares = ConversationShareService(
+            self.db, clock=self.clock
         )
         self.encryption = EncryptionService(self)
         logger.info(

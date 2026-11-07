@@ -4,6 +4,7 @@ export interface AuthSnapshot {
   ready: boolean
   isAuthenticated: boolean
   role: string | null
+  status?: string | null
 }
 
 export interface GuardTarget {
@@ -12,6 +13,7 @@ export interface GuardTarget {
     requiresAuth?: unknown
     guestOnly?: unknown
     role?: unknown
+    public?: unknown
   }
 }
 
@@ -26,6 +28,18 @@ export function resolveNavigation(to: GuardTarget, auth: AuthSnapshot): true | R
 
   if (requiresAuth && !auth.isAuthenticated) {
     return { path: '/login', query: { redirect: to.fullPath } }
+  }
+
+  // 被封禁用户：只允许 /banned 与 /login，其它页面一律回通知页
+  if (auth.isAuthenticated && auth.status === 'disabled') {
+    if (
+      to.fullPath.startsWith('/banned') ||
+      to.fullPath.startsWith('/login') ||
+      to.fullPath.startsWith('/share/')
+    ) {
+      return true
+    }
+    return { path: '/banned' }
   }
 
   const requiredRole = typeof to.meta.role === 'string' ? to.meta.role : null
@@ -46,16 +60,19 @@ export function installGuards(
   ensureLoaded: () => Promise<void>,
 ): void {
   router.beforeEach(async (to) => {
-    try {
-      await ensureLoaded()
-    } catch {
-      // 网络异常时按未登录处理，由登录页展示重试入口
+    // 公开分享页不探测会话，避免 401 把匿名访客带去登录页
+    if (to.meta.public !== true) {
+      try {
+        await ensureLoaded()
+      } catch {
+        // 网络异常时按未登录处理，由登录页展示重试入口
+      }
     }
     return resolveNavigation(to, getAuth())
   })
 
   router.afterEach((to) => {
     const title = typeof to.meta.title === 'string' ? to.meta.title : ''
-    document.title = title ? `${title} · AstrBot 控制台` : 'AstrBot 控制台'
+    document.title = title ? `${title} · 栖语控制台` : '栖语控制台'
   })
 }

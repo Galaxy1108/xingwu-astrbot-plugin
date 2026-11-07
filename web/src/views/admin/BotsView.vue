@@ -1,6 +1,6 @@
 <template>
   <div>
-    <PageHeader title="Bot 管理" description="查看全部租户的 Bot 元数据，可禁用异常实例。">
+    <PageHeader title="Bot 管理" description="查看全部租户的 Bot 元数据，可停用异常实例。">
       <template #actions>
         <v-btn variant="text" prepend-icon="mdi-refresh" :loading="admin.botsLoading" @click="load">
           刷新
@@ -47,6 +47,16 @@
               <td>{{ platformShortLabel(bot.platform) }}</td>
               <td>
                 <StatusChip :status="bot.status" />
+                <v-chip
+                  v-if="bot.admin_disabled"
+                  size="x-small"
+                  color="error"
+                  variant="tonal"
+                  class="admin-disabled-chip"
+                  :title="bot.admin_disabled_reason || ''"
+                >
+                  管理员停用
+                </v-chip>
                 <div class="bot-flags text-muted">
                   <span :class="{ 'flag-on': bot.enabled }">
                     <v-icon size="13">{{ bot.enabled ? 'mdi-check-circle' : 'mdi-minus-circle-outline' }}</v-icon>
@@ -75,10 +85,10 @@
                   size="small"
                   variant="text"
                   color="error"
-                  :disabled="!bot.enabled || bot.status === 'deleted'"
-                  @click="askDisable(bot)"
+                  :disabled="!bot.enabled || bot.status === 'deleted' || bot.admin_disabled"
+                  @click="askStop(bot)"
                 >
-                  禁用
+                  停用
                 </v-btn>
               </td>
             </tr>
@@ -89,15 +99,16 @@
 
     <AdminContentDrawer v-model="contentOpen" :bot="contentTarget" />
 
-    <ConfirmDialog
-      v-model="disableOpen"
-      :title="`禁用「${disableTarget?.name || ''}」？`"
-      :message="`将停用 ${disableTarget?.owner_email || '该用户'} 名下的这个 Bot 平台实例，消息将不再处理。该操作会写入审计日志。`"
-      confirm-text="禁用 Bot"
+    <ReasonDialog
+      v-model="stopOpen"
+      :title="`停用「${stopTarget?.name || ''}」？`"
+      :message="`将停用 ${stopTarget?.owner_email || '该用户'} 名下的这个 Bot 平台实例，消息将不再处理。必须填写原因，用户会在 Bot 详情看到并可以申诉。`"
+      label="停用原因"
+      confirm-text="确认停用"
       danger
-      :loading="disabling"
-      @confirm="confirmDisable"
-      @cancel="disableOpen = false"
+      :loading="stopping"
+      @confirm="confirmStop"
+      @cancel="stopOpen = false"
     />
   </div>
 </template>
@@ -108,7 +119,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import StatusChip from '@/components/StatusChip.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
-import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import ReasonDialog from '@/components/ReasonDialog.vue'
 import AdminContentDrawer from '@/components/AdminContentDrawer.vue'
 import { useAdminStore } from '@/stores/admin'
 import { useUiStore } from '@/stores/ui'
@@ -121,9 +132,9 @@ const ui = useUiStore()
 
 const contentOpen = ref(false)
 const contentTarget = ref<AdminContentTarget | null>(null)
-const disableOpen = ref(false)
-const disableTarget = ref<AdminBot | null>(null)
-const disabling = ref(false)
+const stopOpen = ref(false)
+const stopTarget = ref<AdminBot | null>(null)
+const stopping = ref(false)
 
 onMounted(() => {
   void load()
@@ -137,9 +148,9 @@ async function load(): Promise<void> {
   }
 }
 
-function askDisable(bot: AdminBot): void {
-  disableTarget.value = bot
-  disableOpen.value = true
+function askStop(bot: AdminBot): void {
+  stopTarget.value = bot
+  stopOpen.value = true
 }
 
 function openContent(bot: AdminBot): void {
@@ -147,18 +158,18 @@ function openContent(bot: AdminBot): void {
   contentOpen.value = true
 }
 
-async function confirmDisable(): Promise<void> {
-  if (!disableTarget.value) return
-  disabling.value = true
+async function confirmStop(reason: string): Promise<void> {
+  if (!stopTarget.value) return
+  stopping.value = true
   try {
-    await admin.disableBot(disableTarget.value.id)
-    disableOpen.value = false
-    ui.notify('Bot 已禁用', 'success')
+    await admin.disableBot(stopTarget.value.id, reason)
+    stopOpen.value = false
+    ui.notify('Bot 已停用', 'success')
+    await load()
   } catch (error) {
-    disableOpen.value = false
-    ui.notifyError(errorMessage(error, '禁用 Bot 失败'))
+    ui.notifyError(errorMessage(error, '停用 Bot 失败'))
   } finally {
-    disabling.value = false
+    stopping.value = false
   }
 }
 </script>
@@ -178,6 +189,10 @@ async function confirmDisable(): Promise<void> {
 
 .bots-table :deep(th) {
   white-space: nowrap;
+}
+
+.admin-disabled-chip {
+  margin-top: 4px;
 }
 
 .bot-flags {

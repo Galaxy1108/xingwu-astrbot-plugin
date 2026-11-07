@@ -120,14 +120,14 @@
           />
 
           <v-divider class="my-5" />
-          <h3 class="json-title">AstrBot 配置</h3>
+          <h3 class="json-title">后端配置文件</h3>
           <v-select
             v-model="form.base_conf_id"
             :items="profileOptions"
             item-title="name"
             item-value="id"
             label="基础配置文件"
-            hint="创建 Bot 时从该 AstrBot 配置文件克隆；模型、温度、上下文等沿用配置文件设置"
+            hint="创建 Bot 时从后端配置文件克隆；模型、温度、上下文等沿用配置文件设置"
             persistent-hint
             class="mt-3"
           />
@@ -142,7 +142,7 @@
             class="mt-3"
           />
           <p class="text-muted conf-note">
-            配置文件在 AstrBot「配置管理」中维护；本模板只保存引用，下面 JSON 仅作为增量覆盖。
+            配置文件在后端「配置管理」中维护；本模板只保存引用，下面 JSON 仅作为增量覆盖。
             模型配置用于指定该模板创建 Bot 时使用的上游模型与定价。
           </p>
 

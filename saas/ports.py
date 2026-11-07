@@ -75,6 +75,10 @@ class AstrBotPort(Protocol):
 
     async def set_platform_enabled(self, bot_id: str, enabled: bool) -> None: ...
 
+    async def finalize_temp_platform(self, *, temp_id: str, bot_id: str) -> None:
+        """Move provider-specific config from a temp QR platform to a real Bot."""
+        ...
+
     async def apply_credentials(
         self, *, bot_id: str, platform: str, credentials: dict[str, Any]
     ) -> None:

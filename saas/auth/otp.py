@@ -13,6 +13,18 @@ from ..security import constant_time_eq, hmac_hex, new_otp, random_id
 
 EMAIL_MAX_LENGTH = 254
 
+# Purpose namespaces keep login / password-reset / e-mail-bind codes isolated:
+# requesting a reset code never invalidates (or satisfies) a login code.
+OTP_PURPOSES = {"login", "reset", "bind"}
+
+
+def normalize_purpose(purpose: str | None) -> str:
+    value = (purpose or "login").strip().lower()
+    if value not in OTP_PURPOSES:
+        raise ValidationError("未知的验证码用途", field="purpose")
+    return value
+
+
 
 def normalize_email(email: str) -> str:
     return (email or "").strip().lower()
@@ -50,17 +62,31 @@ class OtpService:
     def _now(self) -> int:
         return self.clock.now() if self.clock is not None else int(time.time())
 
-    def _hash(self, email: str, code: str) -> str:
-        return hmac_hex(self._pepper, f"{email}:{code}")
+    def _hash(self, email: str, code: str, purpose: str) -> str:
+        return hmac_hex(self._pepper, f"{purpose}:{email}:{code}")
 
-    def request(self, email: str, *, ip: str = "") -> dict[str, Any]:
+    def _matches(self, email: str, code: str, purpose: str, stored: str) -> bool:
+        if constant_time_eq(self._hash(email, code, purpose), stored):
+            return True
+        # Backwards compatibility: login codes issued before purpose-aware
+        # hashing (007 password-auth deployment) used ``email:code``.
+        if purpose == "login":
+            return constant_time_eq(hmac_hex(self._pepper, f"{email}:{code}"), stored)
+        return False
+
+
+    def request(
+        self, email: str, purpose: str = "login", *, ip: str = ""
+    ) -> dict[str, Any]:
         email = normalize_email(email)
+        purpose = normalize_purpose(purpose)
         if not is_valid_email(email):
             raise ValidationError("邮箱格式不正确", field="email")
         now = self._now()
         latest = self.db.query_one(
-            "SELECT created_at FROM otp_codes WHERE email = ? ORDER BY created_at DESC LIMIT 1",
-            (email,),
+            "SELECT created_at FROM otp_codes WHERE email = ? AND purpose = ? "
+            "ORDER BY created_at DESC LIMIT 1",
+            (email, purpose),
         )
         if latest is not None:
             elapsed = now - int(latest["created_at"])
@@ -74,13 +100,22 @@ class OtpService:
         try:
             with self.db.transaction():
                 self.db.execute(
-                    "UPDATE otp_codes SET consumed_at = ? WHERE email = ? AND consumed_at = 0",
-                    (now, email),
+                    "UPDATE otp_codes SET consumed_at = ? "
+                    "WHERE email = ? AND purpose = ? AND consumed_at = 0",
+                    (now, email, purpose),
                 )
                 self.db.execute(
                     "INSERT INTO otp_codes(id, email, code_hash, purpose, created_at, "
                     "expires_at, attempts, consumed_at, ip) VALUES (?,?,?,?,?,?,0,0,?)",
-                    (random_id("otp"), email, self._hash(email, code), "login", now, expires_at, ip),
+                    (
+                        random_id("otp"),
+                        email,
+                        self._hash(email, code, purpose),
+                        purpose,
+                        now,
+                        expires_at,
+                        ip,
+                    ),
                 )
         except sqlite3.Error as exc:  # pragma: no cover - defensive
             raise AppError("验证码发送失败，请稍后重试") from exc
@@ -92,8 +127,9 @@ class OtpService:
         }
         return payload
 
-    def verify(self, email: str, code: str) -> None:
+    def verify(self, email: str, code: str, purpose: str = "login") -> None:
         email = normalize_email(email)
+        purpose = normalize_purpose(purpose)
         code = (code or "").strip()
         if not is_valid_email(email):
             raise ValidationError("邮箱格式不正确", field="email")
@@ -101,9 +137,9 @@ class OtpService:
             raise ValidationError("请输入验证码", code="otp_invalid", status=401, field="code")
         now = self._now()
         row = self.db.query_one(
-            "SELECT * FROM otp_codes WHERE email = ? AND consumed_at = 0 "
-            "ORDER BY created_at DESC LIMIT 1",
-            (email,),
+            "SELECT * FROM otp_codes WHERE email = ? AND purpose = ? "
+            "AND consumed_at = 0 ORDER BY created_at DESC LIMIT 1",
+            (email, purpose),
         )
         if row is None:
             raise AppError(
@@ -121,7 +157,7 @@ class OtpService:
                 status=429,
                 field="code",
             )
-        if not constant_time_eq(self._hash(email, code), str(row["code_hash"])):
+        if not self._matches(email, code, purpose, str(row["code_hash"])):
             attempts += 1
             self.db.execute(
                 "UPDATE otp_codes SET attempts = ? WHERE id = ?", (attempts, row["id"])

@@ -34,7 +34,7 @@ const routes: RouteRecordRaw[] = [
         path: 'connect',
         name: 'connect',
         component: () => import('@/views/connect/ConnectView.vue'),
-        meta: { title: '扫码接入' },
+        meta: { title: '添加机器人' },
       },
       {
         path: 'bots',
@@ -49,6 +49,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Bot 详情' },
       },
       {
+        path: 'bots/:id/conversations',
+        name: 'bot-conversations',
+        component: () => import('@/views/bots/ConversationsView.vue'),
+        meta: { title: '对话历史' },
+      },
+      {
+        path: 'bots/:id/notes',
+        name: 'bot-notes',
+        component: () => import('@/views/bots/NotesView.vue'),
+        meta: { title: '笔记' },
+      },
+      {
         path: 'bots/:id/memory',
         name: 'bot-memory',
         component: () => import('@/views/memory/MemoryView.vue'),
@@ -59,6 +71,12 @@ const routes: RouteRecordRaw[] = [
         name: 'privacy',
         component: () => import('@/views/settings/PrivacyView.vue'),
         meta: { title: '隐私与加密' },
+      },
+      {
+        path: 'settings/account',
+        name: 'account-settings',
+        component: () => import('@/views/settings/AccountView.vue'),
+        meta: { title: '账户设置' },
       },
       {
         path: 'billing',
@@ -99,6 +117,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '用户管理', role: 'admin' },
       },
       {
+        path: 'invites',
+        name: 'admin-invites',
+        component: () => import('@/views/admin/InvitesView.vue'),
+        meta: { title: '邀请码', role: 'admin' },
+      },
+      {
         path: 'bots',
         name: 'admin-bots',
         component: () => import('@/views/admin/BotsView.vue'),
@@ -117,10 +141,22 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '记忆 API 设置', role: 'admin' },
       },
       {
+        path: 'appeals',
+        name: 'admin-appeals',
+        component: () => import('@/views/admin/AppealsView.vue'),
+        meta: { title: '申诉处理', role: 'admin' },
+      },
+      {
         path: 'audit',
         name: 'admin-audit',
         component: () => import('@/views/admin/AuditView.vue'),
         meta: { title: '审计日志', role: 'admin' },
+      },
+      {
+        path: 'redemption-codes',
+        name: 'admin-redemption-codes',
+        component: () => import('@/views/admin/RedemptionCodesView.vue'),
+        meta: { title: '兑换码', role: 'admin' },
       },
       {
         path: 'orders',
@@ -129,6 +165,24 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '手动充值', role: 'admin' },
       },
     ],
+  },
+  {
+    path: '/oauth/callback',
+    name: 'oauth-callback',
+    component: () => import('@/views/auth/OAuthCallbackView.vue'),
+    meta: { title: '第三方登录', public: true },
+  },
+  {
+    path: '/share/:token',
+    name: 'public-share',
+    component: () => import('@/views/share/PublicShareView.vue'),
+    meta: { title: '对话分享', public: true },
+  },
+  {
+    path: '/banned',
+    name: 'banned',
+    component: () => import('@/views/auth/BannedView.vue'),
+    meta: { title: '账号已被封禁', requiresAuth: true },
   },
   {
     path: '/:pathMatch(.*)*',
@@ -152,6 +206,7 @@ installGuards(
       ready: auth.status === 'ready',
       isAuthenticated: auth.isAuthenticated,
       role: auth.role,
+      status: auth.user?.status ?? null,
     }
   },
   () => useAuthStore().ensureLoaded(),

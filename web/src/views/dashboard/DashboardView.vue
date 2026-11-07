@@ -151,7 +151,9 @@ const botFilter = ref('')
 
 const botOptions = computed(() => [
   { title: '全部 Bot', value: '' },
-  ...byBot.value.map((item) => ({ title: item.bot_name || item.bot_id, value: item.bot_id })),
+  ...byBot.value
+    .filter((item) => Boolean(item.bot_id))
+    .map((item) => ({ title: item.bot_name || item.bot_id, value: item.bot_id })),
 ])
 
 const stats = computed(() => [

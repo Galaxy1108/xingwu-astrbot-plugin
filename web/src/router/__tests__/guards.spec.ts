@@ -5,9 +5,9 @@ function target(meta: GuardTarget['meta'], fullPath = '/bots'): GuardTarget {
   return { fullPath, meta }
 }
 
-const anonymous: AuthSnapshot = { ready: true, isAuthenticated: false, role: null }
-const user: AuthSnapshot = { ready: true, isAuthenticated: true, role: 'user' }
-const admin: AuthSnapshot = { ready: true, isAuthenticated: true, role: 'admin' }
+const anonymous: AuthSnapshot = { ready: true, isAuthenticated: false, role: null, status: null }
+const user: AuthSnapshot = { ready: true, isAuthenticated: true, role: 'user', status: 'active' }
+const admin: AuthSnapshot = { ready: true, isAuthenticated: true, role: 'admin', status: 'active' }
 
 describe('路由守卫 · 未登录（401 后 store 已清空）', () => {
   it('访问受保护页面重定向到 /login 并携带 redirect', () => {
@@ -15,8 +15,9 @@ describe('路由守卫 · 未登录（401 后 store 已清空）', () => {
     expect(result).toEqual({ path: '/login', query: { redirect: '/bots/b_1?qr=1' } })
   })
 
-  it('公开页面（登录页）直接放行', () => {
+  it('公开页面（登录页/公开分享）直接放行', () => {
     expect(resolveNavigation(target({ guestOnly: true }, '/login'), anonymous)).toBe(true)
+    expect(resolveNavigation(target({ public: true }, '/share/token123'), anonymous)).toBe(true)
   })
 
   it('未登录访问 /admin 同样跳登录', () => {
@@ -46,4 +47,28 @@ describe('路由守卫 · 角色（403）', () => {
   it('管理员访问登录页（guestOnly）→ 首页', () => {
     expect(resolveNavigation(target({ guestOnly: true }, '/login'), admin)).toEqual({ path: '/' })
   })
+
+describe('路由守卫 · 封禁账号', () => {
+  const banned: AuthSnapshot = {
+    ready: true,
+    isAuthenticated: true,
+    role: 'user',
+    status: 'disabled',
+  }
+
+  it('封禁用户访问普通页面重定向 /banned', () => {
+    expect(resolveNavigation(target({ requiresAuth: true }, '/bots'), banned)).toEqual({
+      path: '/banned',
+    })
+    expect(resolveNavigation(target({ requiresAuth: true }, '/admin/users'), banned)).toEqual({
+      path: '/banned',
+    })
+  })
+
+  it('封禁用户允许停留在 /banned、/login 与公开分享页', () => {
+    expect(resolveNavigation(target({ requiresAuth: true }, '/banned'), banned)).toBe(true)
+    expect(resolveNavigation(target({ guestOnly: true }, '/login'), banned)).toBe(true)
+    expect(resolveNavigation(target({ public: true }, '/share/token123'), banned)).toBe(true)
+  })
+})
 })

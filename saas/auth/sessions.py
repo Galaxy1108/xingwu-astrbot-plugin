@@ -77,7 +77,9 @@ class SessionService:
         if now >= int(session["expires_at"]) or now >= int(session["absolute_expires_at"]):
             return None
         user = self.db.query_one("SELECT * FROM users WHERE id = ?", (session["user_id"],))
-        if user is None or user["status"] != "active":
+        # Banned (status='disabled') users keep a session so they can read the
+        # ban notice and appeal; web/app.py gates every other API path.
+        if user is None or user["status"] == "deleted":
             return None
         # Sliding expiry for regular users; admin sessions have a fixed 12h TTL.
         if user["role"] != "admin":

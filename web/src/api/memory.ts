@@ -19,6 +19,7 @@ export function listMemories(
     kind: query.kind,
     tag: query.tag,
     q: query.q,
+    importance: query.importance,
   })
 }
 

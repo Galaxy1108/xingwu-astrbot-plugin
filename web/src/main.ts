@@ -24,14 +24,15 @@ const ui = useUiStore(pinia)
 setUnauthorizedHandler(() => {
   auth.clear()
   const current = router.currentRoute.value
-  if (current.path === '/login') return
+  if (current.path === '/login' || current.path.startsWith('/share/')) return
   const query: Record<string, string> = {}
   if (current.meta.requiresAuth) query.redirect = current.fullPath
   void router.replace({ path: '/login', query })
 })
 
-// 403：只提示无权限，不登出
-setForbiddenHandler(() => {
+// 403：只提示无权限，不登出；加密内容确认由调用方弹出专用确认框，不再重复 toast
+setForbiddenHandler((error) => {
+  if (error.code === 'confirmation_required') return
   ui.notifyError('没有权限执行该操作')
 })
 

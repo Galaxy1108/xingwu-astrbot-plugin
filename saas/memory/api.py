@@ -74,9 +74,16 @@ class MemoryAPI:
         kind: str | None = None,
         tag: str | None = None,
         q: str | None = None,
+        importance: int | None = None,
     ) -> dict[str, Any]:
         return self.service.list(
-            bot_id, page=page, page_size=page_size, kind=kind, tag=tag, q=q
+            bot_id,
+            page=page,
+            page_size=page_size,
+            kind=kind,
+            tag=tag,
+            q=q,
+            importance=importance,
         )
 
     def get(self, bot_id: str, memory_id: int) -> dict[str, Any] | None:

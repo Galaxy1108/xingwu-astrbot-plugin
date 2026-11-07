@@ -269,10 +269,14 @@ export async function submitLoginRequest(page: Page, email: string): Promise<str
 export async function uiLogin(page: Page, email: string, invite?: string): Promise<void> {
   await page.goto('/console/login')
   await expect(page.getByRole('heading', { name: '登录控制台' })).toBeVisible()
+  // 默认可能是密码登录；切到验证码登录。
+  const otpTab = page.getByRole('button', { name: '验证码登录' })
+  if (await otpTab.isVisible().catch(() => false)) await otpTab.click()
   if (invite) {
-    await page.getByRole('button', { name: /用邀请码注册/ }).click()
-    await expect(page.getByLabel('邀请码')).toBeVisible()
-    await page.getByLabel('邀请码').fill(invite)
+    const otpRegister = page.getByRole('button', { name: '邮箱验证码注册' })
+    if (await otpRegister.isVisible().catch(() => false)) await otpRegister.click()
+    await expect(page.getByLabel(/邀请码/)).toBeVisible()
+    await page.getByLabel(/邀请码/).fill(invite)
   }
   await page.getByLabel('邮箱').fill(email)
   const code = await submitLoginRequest(page, email)

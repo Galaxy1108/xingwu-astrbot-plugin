@@ -81,6 +81,8 @@ DEFAULT_BEHAVIOR_SETTINGS: dict[str, Any] = {
     "rerank_candidate_limit": 30,
     "rrf_k": 60,
     "recall_top_k": 5,
+    "auto_inject": True,
+    "auto_extract": True,
 }
 
 # value → (minimum, maximum) for every integer setting.
@@ -156,7 +158,7 @@ def normalize_memory_settings(raw: Any) -> dict[str, Any]:
         for key, value in incoming.items():
             if key not in target:
                 continue
-            if key == "enabled":
+            if key in {"enabled", "auto_inject", "auto_extract"}:
                 target[key] = _as_bool(value, bool(target[key]))
             elif key in {"base_url", "model", "api_key"}:
                 target[key] = str(value or "").strip()
@@ -215,6 +217,8 @@ class BehaviorSettings:
     rerank_candidate_limit: int = 30
     rrf_k: int = 60
     recall_top_k: int = 5
+    auto_inject: bool = True
+    auto_extract: bool = True
 
 
 @dataclass(frozen=True)
@@ -523,7 +527,7 @@ class MemoryService:
             raise MemoryValidationError(f"记忆内容不能超过 {MAX_CONTENT_LENGTH} 字符")
         kind = draft.kind if draft.kind in KIND_LABELS else canonical_kind(draft.kind)
         memory_type = canonical_kind(draft.memory_type or kind)
-        importance = max(1, min(5, int(draft.importance or 3)))
+        importance = max(1, min(6, int(draft.importance or 3)))
         strength = clamp_strength(draft.strength)
         now = self.clock.now()
         repo = self._repo(bot_id)
@@ -624,6 +628,13 @@ class MemoryService:
             memories = await self._run_retrievers(
                 self._retrievers(repo, limit), ctx
             )
+        # Always-inject memories (importance=6 / pinned) bypass retrieval ranking.
+        always = self.always_recall(bot_id)
+        if always:
+            seen = {memory.id for memory in memories}
+            memories = [m for m in always if m.id not in seen] + [
+                m for m in memories if m.id in seen or m.id not in {x.id for x in always}
+            ]
         # Token-budget trim keeps prompt injection bounded.
         selected: list[Memory] = []
         used = 0
@@ -796,19 +807,29 @@ class MemoryService:
         kind: str | None = None,
         tag: str | None = None,
         q: str | None = None,
+        importance: int | None = None,
     ) -> dict[str, Any]:
         repo = self._repo(bot_id)
         page = max(1, int(page))
         page_size = max(1, min(100, int(page_size)))
         if q and q.strip():
             hits = repo.search_fts(q.strip(), 200, kind=kind)
-            memories = [hit.memory for hit in hits]
+            memories = [
+                hit.memory
+                for hit in hits
+                if importance is None or hit.memory.importance == importance
+            ]
             total = len(memories)
             start = (page - 1) * page_size
             memories = memories[start : start + page_size]
         else:
-            memories = repo.list(kind=kind, tag=tag, limit=page_size * page)
-            total = repo.count(kind=kind, tag=tag)
+            memories = repo.list(
+                kind=kind,
+                tag=tag,
+                limit=page_size * page,
+                importance=importance,
+            )
+            total = repo.count(kind=kind, tag=tag, importance=importance)
             memories = memories[(page - 1) * page_size :]
         return {
             "items": [memory.to_dict() for memory in memories],
@@ -847,7 +868,7 @@ class MemoryService:
         if "reasoning" in patch:
             memory.reasoning = str(patch["reasoning"] or "")
         if "importance" in patch:
-            memory.importance = max(1, min(5, int(patch["importance"])))
+            memory.importance = max(1, min(6, int(patch["importance"])))
         if "pinned" in patch:
             memory.pinned = bool(patch["pinned"])
         if "tags" in patch:
@@ -941,6 +962,19 @@ class MemoryService:
             "total": len(memories),
             "model": embedding.model,
         }
+
+    def always_recall(self, bot_id: str, *, limit: int = 100) -> list[Memory]:
+        """Memories marked importance=6 (or pinned) are injected on every turn."""
+        try:
+            rows = self._repo(bot_id).list(limit=limit)
+        except Exception:  # noqa: BLE001
+            return []
+        selected = [
+            memory
+            for memory in rows
+            if int(memory.importance or 0) >= 6 or bool(memory.pinned)
+        ]
+        return selected[:limit]
 
     def stats(self, bot_id: str) -> dict[str, Any]:
         repo = self._repo(bot_id)

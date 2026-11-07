@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { LedgerEntry, PageResult, Template, UsageByBot, UsageDaily, Wallet, WalletUsage } from '@/types'
+import type { LedgerEntry, PageResult, RedeemResult, Template, UsageByBot, UsageDaily, Wallet, WalletUsage } from '@/types'
 
 export function listTemplates(): Promise<{ items: Template[] }> {
   return api.get<{ items: Template[] }>('/templates')
@@ -25,4 +25,9 @@ export function getDailyUsage(days = 30, botId?: string): Promise<UsageDaily> {
 
 export function getUsageByBot(days = 30): Promise<{ days: number; items: UsageByBot[] }> {
   return api.get<{ days: number; items: UsageByBot[] }>('/me/usage/by-bot', { days })
+}
+
+/** 内测兑换码：POST /api/me/redeem {code}。 */
+export function redeemCode(code: string): Promise<RedeemResult> {
+  return api.post<RedeemResult>('/me/redeem', { code })
 }

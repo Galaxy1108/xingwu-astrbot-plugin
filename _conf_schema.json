@@ -105,5 +105,20 @@
     "type": "string",
     "default": "http://127.0.0.1:6185",
     "hint": "默认本机 Dashboard；生产填反向代理后的 HTTPS 地址。"
+  },
+  "github_client_id": {
+    "description": "GitHub OAuth Client ID（可选；配置后登录/账户设置显示 GitHub 登录）",
+    "type": "string",
+    "default": ""
+  },
+  "github_client_secret": {
+    "description": "GitHub OAuth Client Secret（仅后端使用）",
+    "type": "string",
+    "default": ""
+  },
+  "github_redirect_uri": {
+    "description": "GitHub OAuth 回调地址（例如 https://你的域名/api/auth/oauth/github/callback）",
+    "type": "string",
+    "default": ""
   }
 }

@@ -56,7 +56,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 "importance": {
                     "type": "integer",
                     "minimum": 1,
-                    "maximum": 5,
+                    "maximum": 6,
                     "default": 3,
                 },
             },

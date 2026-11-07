@@ -64,7 +64,7 @@ export interface RequestOptions {
 }
 
 type UnauthorizedHandler = () => void
-type ForbiddenHandler = () => void
+type ForbiddenHandler = (error: ApiError) => void
 
 let unauthorizedHandler: UnauthorizedHandler | null = null
 let forbiddenHandler: ForbiddenHandler | null = null
@@ -198,7 +198,7 @@ async function fetchOnce<T>(path: string, options: RequestOptions): Promise<T> {
     if (response.status === 401) {
       unauthorizedHandler?.()
     } else if (response.status === 403) {
-      forbiddenHandler?.()
+      forbiddenHandler?.(error)
     }
     throw error
   }

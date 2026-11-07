@@ -11,23 +11,32 @@
   >
     <div class="sidebar-container">
       <div class="brand-row" :class="{ 'brand-row--rail': isRail }">
-        <v-icon color="primary" size="22">mdi-robot-outline</v-icon>
-        <template v-if="!isRail">
-          <span class="brand-name">AstrBot</span>
-          <v-chip size="x-small" variant="tonal" color="primary" class="brand-chip">SaaS</v-chip>
-        </template>
-        <v-spacer v-if="!isRail" />
-        <v-btn
-          v-if="!isMobile"
-          icon
-          size="small"
-          variant="text"
-          class="rail-toggle"
-          :aria-label="isRail ? '展开侧栏' : '收起侧栏'"
-          @click="rail = !rail"
+        <button
+          v-if="isRail"
+          type="button"
+          class="rail-brand"
+          aria-label="展开侧栏"
+          @click="rail = false"
         >
-          <v-icon size="18">mdi-menu-open</v-icon>
-        </v-btn>
+          <BrandMark :size="26" />
+        </button>
+        <template v-else>
+          <BrandMark :size="26" />
+          <span class="brand-name">星坞</span>
+          <v-chip size="x-small" variant="tonal" color="primary" class="brand-chip">Alpha</v-chip>
+          <v-spacer />
+          <v-btn
+            v-if="!isMobile"
+            icon
+            size="small"
+            variant="text"
+            class="rail-toggle"
+            aria-label="收起侧栏"
+            @click="rail = true"
+          >
+            <v-icon size="18">mdi-menu-open</v-icon>
+          </v-btn>
+        </template>
       </div>
 
       <v-list nav density="compact" class="nav-list">
@@ -61,7 +70,7 @@
       <v-spacer />
 
       <div class="sidebar-footer">
-        <div v-if="!isRail" class="version-line">AstrBot SaaS {{ auth.version || '0.4.0' }}</div>
+        <div v-if="!isRail" class="version-line">星坞 {{ auth.version || '0.5.0' }} · Alpha</div>
       </div>
     </div>
   </v-navigation-drawer>
@@ -80,8 +89,10 @@
   </v-app-bar>
 
   <v-main class="console-main">
-    <div class="page-container">
-      <router-view />
+    <div class="content-shell">
+      <div class="page-container">
+        <router-view />
+      </div>
     </div>
   </v-main>
 </template>
@@ -90,6 +101,7 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useDisplay } from 'vuetify'
+import BrandMark from '@/components/BrandMark.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeMode } from '@/composables/useThemeMode'
 import UserMenu from '@/components/UserMenu.vue'
@@ -113,6 +125,7 @@ const navItems = [
   { to: '/bots', title: '我的 Bot', icon: 'mdi-robot-outline' },
   { to: '/settings/privacy', title: '隐私与加密', icon: 'mdi-shield-lock-outline' },
   { to: '/billing', title: '额度', icon: 'mdi-wallet-outline' },
+  { to: '/settings/account', title: '账户设置', icon: 'mdi-account-cog-outline' },
 ]
 
 const currentTitle = computed(() => {
@@ -148,6 +161,22 @@ function refreshPage(): void {
 .brand-row--rail {
   justify-content: center;
   padding: 0;
+}
+
+.rail-brand {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.rail-brand:hover {
+  background: var(--console-surface-variant);
 }
 
 .brand-name {

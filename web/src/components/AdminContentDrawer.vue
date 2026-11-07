@@ -55,6 +55,10 @@
           <v-icon start size="18">mdi-brain</v-icon>
           记忆
         </v-tab>
+        <v-tab value="notes" data-testid="admin-content-tab-notes">
+          <v-icon start size="18">mdi-note-text-outline</v-icon>
+          笔记
+        </v-tab>
       </v-tabs>
 
       <v-divider />
@@ -205,7 +209,7 @@
         </div>
 
         <!-- 记忆 -->
-        <div v-else class="tab-panel memories-panel">
+        <div v-else-if="activeTab === 'memories'" class="tab-panel memories-panel">
           <div class="memory-toolbar">
             <form class="memory-filters" @submit.prevent="applyMemoryFilters">
               <v-text-field
@@ -308,7 +312,24 @@
                     <v-icon v-if="memory.pinned" size="15" color="warning" title="已置顶">
                       mdi-pin
                     </v-icon>
-                    <span class="text-muted memory-importance">★ {{ memory.importance }}/5</span>
+                    <v-chip
+                      v-if="memory.importance >= 6"
+                      size="x-small"
+                      variant="tonal"
+                      :color="importanceColor(memory.importance)"
+                      :title="importanceText(memory.importance)"
+                    >
+                      总是注入
+                    </v-chip>
+                    <span v-else class="text-muted memory-importance">★ {{ memory.importance }}/6</span>
+                    <v-chip
+                      v-if="isAutoExtracted(memory)"
+                      size="x-small"
+                      variant="tonal"
+                      color="info"
+                    >
+                      自动提取
+                    </v-chip>
                   </div>
                   <p class="memory-content">{{ memory.content }}</p>
                   <p v-if="memory.reasoning" class="memory-reason text-muted">
@@ -366,8 +387,170 @@
             </div>
           </template>
         </div>
+
+        <!-- 笔记 -->
+        <div v-else class="tab-panel notes-panel">
+          <div class="memory-toolbar">
+            <form class="memory-filters" @submit.prevent="applyNoteFilters">
+              <v-text-field
+                v-model.trim="noteFilters.q"
+                label="搜索标题 / 正文"
+                prepend-inner-icon="mdi-magnify"
+                density="compact"
+                hide-details
+                class="filter-q"
+                data-testid="admin-note-search"
+              />
+              <v-text-field
+                v-model.trim="noteFilters.tag"
+                label="标签"
+                density="compact"
+                hide-details
+                class="filter-kind"
+              />
+              <v-btn type="submit" color="primary" variant="tonal" :loading="notesLoading">
+                筛选
+              </v-btn>
+              <v-btn variant="text" @click="resetNoteFilters">重置</v-btn>
+            </form>
+          </div>
+
+          <v-alert v-if="notesError" type="error" variant="tonal" class="mb-3">
+            <div class="alert-row">
+              <span>{{ notesError }}</span>
+              <v-btn size="small" variant="text" color="error" @click="loadNotes(notesPage)">
+                重试
+              </v-btn>
+            </div>
+          </v-alert>
+
+          <LoadingSkeleton v-if="notesLoading && !notes.length" variant="table" :rows="6" />
+
+          <EmptyState
+            v-else-if="!notesError && notes.length === 0"
+            icon="mdi-note-text-outline"
+            :title="hasNoteFilters ? '没有符合条件的笔记' : '暂无笔记'"
+            :description="
+              hasNoteFilters
+                ? '试试调整搜索关键词或标签。'
+                : '该 Bot 还没有创建笔记；笔记与记忆分开保存长文本资料。'
+            "
+          />
+
+          <template v-else-if="notes.length">
+            <div class="memory-list">
+              <article
+                v-for="note in notes"
+                :key="note.short_id"
+                class="memory-row"
+                data-testid="admin-note-row"
+              >
+                <div class="memory-main">
+                  <div class="memory-meta">
+                    <v-chip size="x-small" variant="tonal" color="primary">笔记</v-chip>
+                    <span class="text-mono text-muted note-short">{{ note.short_id }}</span>
+                    <span class="text-muted memory-importance">{{ note.content_length }} 字</span>
+                  </div>
+                  <p class="memory-content">{{ note.title || '未命名笔记' }}</p>
+                  <p class="memory-reason text-muted">{{ truncate(note.preview, 140) }}</p>
+                  <div class="memory-sub text-muted">
+                    更新 {{ formatDateTime(note.updated_at) }}
+                    <template v-if="note.tags?.length"> · {{ note.tags.join(' / ') }}</template>
+                  </div>
+                </div>
+                <div class="memory-actions">
+                  <v-btn
+                    icon
+                    size="small"
+                    variant="text"
+                    title="查看"
+                    aria-label="查看笔记"
+                    data-testid="admin-note-open"
+                    @click="openNoteViewer(note)"
+                  >
+                    <v-icon size="18">mdi-eye-outline</v-icon>
+                  </v-btn>
+                  <v-btn
+                    icon
+                    size="small"
+                    variant="text"
+                    color="error"
+                    title="删除"
+                    aria-label="删除笔记"
+                    data-testid="admin-note-delete"
+                    @click="askDeleteNote(note)"
+                  >
+                    <v-icon size="18">mdi-delete-outline</v-icon>
+                  </v-btn>
+                </div>
+              </article>
+            </div>
+
+            <div class="memory-footer">
+              <span class="text-muted">共 {{ notesTotal }} 篇 · 第 {{ notesPage }} / {{ notePageCount }} 页</span>
+              <v-pagination
+                v-if="notesTotal > notesPageSize"
+                :model-value="notesPage"
+                :length="notePageCount"
+                :total-visible="5"
+                density="compact"
+                @update:model-value="loadNotes"
+              />
+            </div>
+          </template>
+        </div>
       </div>
     </div>
+
+    <v-dialog v-model="noteViewerOpen" max-width="720" scrollable>
+      <v-card class="note-viewer-card">
+        <v-card-title class="note-viewer-title">
+          <span>{{ noteRead?.title || selectedNote?.title || '查看笔记' }}</span>
+          <v-btn icon variant="text" aria-label="关闭笔记" @click="noteViewerOpen = false">
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+        </v-card-title>
+        <v-card-text>
+          <div class="text-muted note-viewer-meta">
+            <span class="text-mono">{{ selectedNote?.short_id }}</span>
+            <span v-if="noteRead"> · {{ noteRead.total_length }} 字</span>
+          </div>
+          <v-alert v-if="noteReadError" type="error" variant="tonal" density="compact" class="mb-3">
+            {{ noteReadError }}
+          </v-alert>
+          <pre class="note-viewer-body">{{ noteReadContent || '（空笔记）' }}</pre>
+          <div v-if="noteRead?.has_more" class="note-viewer-more">
+            <v-btn variant="tonal" color="primary" :loading="noteReadMore" @click="loadMoreNote">
+              加载更多
+            </v-btn>
+            <span class="text-muted">已显示 {{ noteReadContent.length }} / {{ noteRead.total_length }} 字</span>
+          </div>
+        </v-card-text>
+        <v-card-actions>
+          <v-btn
+            variant="text"
+            color="error"
+            :disabled="!selectedNote"
+            @click="selectedNote && askDeleteNote(selectedNote)"
+          >
+            删除笔记
+          </v-btn>
+          <v-spacer />
+          <v-btn variant="text" @click="noteViewerOpen = false">关闭</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <ConfirmDialog
+      v-model="noteDeleteOpen"
+      title="删除这篇笔记？"
+      :message="`删除后不可恢复。\n\n${noteDeleteTarget?.title || ''}`"
+      confirm-text="删除笔记"
+      danger
+      :loading="noteDeleting"
+      @confirm="confirmDeleteNote"
+      @cancel="noteDeleteOpen = false"
+    />
 
     <!-- 记忆编辑 drawer -->
     <v-navigation-drawer
@@ -529,17 +712,21 @@ import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useUiStore } from '@/stores/ui'
 import { useMemoryKindMeta } from '@/composables/useMemoryKindMeta'
-import { isApiError } from '@/api/client'
+import { importanceColor, importanceText, isAutoExtracted, memoryImportanceOptions } from '@/utils/memoryMeta'
+import { isApiError, toApiError } from '@/api/client'
 import { downloadJson } from '@/utils/download'
 import { errorMessage } from '@/utils/errors'
 import { formatDateTime, truncate } from '@/utils/format'
 import {
   deleteAdminBotMemory,
   exportAdminBotMemories,
+  deleteAdminBotNote,
   importAdminBotMemories,
   listAdminBotConversations,
+  listAdminBotNotes,
   listAdminBotMemories,
   patchAdminBotMemory,
+  readAdminBotNote,
 } from '@/api/admin'
 import type {
   AdminContentTarget,
@@ -547,6 +734,8 @@ import type {
   ConversationMessage,
   MemoryImportReport,
   MemoryItem,
+  NoteReadPage,
+  NoteSummary,
   MemoryKind,
   MemoryPatch,
 } from '@/types'
@@ -571,7 +760,7 @@ const open = computed({
 const botId = computed(() => props.bot?.id ?? '')
 
 /* ------------------------------------------------------------ tabs */
-const activeTab = ref<'conversations' | 'memories'>('conversations')
+const activeTab = ref<'conversations' | 'memories' | 'notes'>('conversations')
 
 /* ------------------------------------------------ encrypted confirmation */
 const contentConfirmed = ref(false)
@@ -707,10 +896,7 @@ const kindFilterOptions = [
   { title: '笔记', value: 'note' },
 ]
 const kindEditOptions = kindFilterOptions.slice(1)
-const importanceOptions = [1, 2, 3, 4, 5].map((value) => ({
-  title: `${value} · ${['很低', '较低', '一般', '较高', '很高'][value - 1]}`,
-  value,
-}))
+const importanceOptions = memoryImportanceOptions
 
 const hasMemoryFilters = computed(() => Boolean(memoryFilters.q || memoryFilters.kind))
 const memoryPageCount = computed(() =>
@@ -747,6 +933,146 @@ async function loadMemories(page = 1, confirm = contentConfirmed.value): Promise
     memoryError.value = errorMessage(error, '加载记忆失败')
   } finally {
     memoryLoading.value = false
+  }
+}
+
+/* ------------------------------------------------------------ notes */
+const notes = ref<NoteSummary[]>([])
+const notesTotal = ref(0)
+const notesPage = ref(1)
+const notesPageSize = ref(10)
+const notesLoading = ref(false)
+const notesError = ref('')
+const notesLoaded = ref(false)
+const noteFilters = reactive({ q: '', tag: '' })
+const noteViewerOpen = ref(false)
+const selectedNote = ref<NoteSummary | null>(null)
+const noteRead = ref<NoteReadPage | null>(null)
+const noteReadContent = ref('')
+const noteReadError = ref('')
+const noteReadMore = ref(false)
+const noteDeleteOpen = ref(false)
+const noteDeleteTarget = ref<NoteSummary | null>(null)
+const noteDeleting = ref(false)
+const hasNoteFilters = computed(() => Boolean(noteFilters.q || noteFilters.tag))
+const notePageCount = computed(() =>
+  Math.max(1, Math.ceil(notesTotal.value / Math.max(1, notesPageSize.value))),
+)
+
+async function loadNotes(page = 1, confirm = contentConfirmed.value): Promise<void> {
+  if (!botId.value) return
+  notesLoading.value = true
+  notesError.value = ''
+  cancelled.value = false
+  try {
+    const result = await listAdminBotNotes(
+      botId.value,
+      {
+        page,
+        page_size: notesPageSize.value,
+        q: noteFilters.q || undefined,
+        tag: noteFilters.tag || undefined,
+      },
+      confirm,
+    )
+    notes.value = result.items ?? []
+    notesTotal.value = result.total ?? 0
+    notesPage.value = result.page ?? page
+    notesPageSize.value = result.page_size ?? notesPageSize.value
+    notesLoaded.value = true
+  } catch (error) {
+    if (isConfirmationRequired(error)) {
+      cancelled.value = false
+      requestContentConfirmation(errorMessage(error), () => loadNotes(page, true))
+      return
+    }
+    notesError.value =
+      toApiError(error).status === 404 || toApiError(error).status === 405
+        ? '管理端笔记接口尚未就绪，请稍后刷新重试。'
+        : errorMessage(error, '加载笔记失败')
+  } finally {
+    notesLoading.value = false
+  }
+}
+
+function applyNoteFilters(): void {
+  void loadNotes(1)
+}
+
+function resetNoteFilters(): void {
+  noteFilters.q = ''
+  noteFilters.tag = ''
+  void loadNotes(1)
+}
+
+async function openNoteViewer(note: NoteSummary): Promise<void> {
+  selectedNote.value = note
+  noteRead.value = null
+  noteReadContent.value = ''
+  noteReadError.value = ''
+  noteViewerOpen.value = true
+  await loadNoteRead(note.short_id, 0, true, contentConfirmed.value)
+}
+
+async function loadNoteRead(
+  shortId: string,
+  offset: number,
+  replace = false,
+  confirm = contentConfirmed.value,
+): Promise<void> {
+  if (!botId.value) return
+  noteReadMore.value = !replace
+  noteReadError.value = ''
+  try {
+    const result = await readAdminBotNote(botId.value, shortId, confirm)
+    noteRead.value = result
+    noteReadContent.value = replace ? result.content : noteReadContent.value + result.content
+  } catch (error) {
+    if (isConfirmationRequired(error)) {
+      requestContentConfirmation(errorMessage(error), () =>
+        loadNoteRead(shortId, offset, replace, true),
+      )
+      return
+    }
+    noteReadError.value =
+      toApiError(error).status === 404 || toApiError(error).status === 405
+        ? '笔记正文接口尚未就绪，请稍后刷新重试。'
+        : errorMessage(error, '加载笔记正文失败')
+  } finally {
+    noteReadMore.value = false
+  }
+}
+
+async function loadMoreNote(): Promise<void> {
+  if (!noteRead.value?.next_offset) return
+  await loadNoteRead(noteRead.value.short_id, noteRead.value.next_offset)
+}
+
+function askDeleteNote(note: NoteSummary): void {
+  noteDeleteTarget.value = note
+  noteDeleteOpen.value = true
+}
+
+async function confirmDeleteNote(confirm = contentConfirmed.value): Promise<void> {
+  if (!botId.value || !noteDeleteTarget.value) return
+  noteDeleting.value = true
+  try {
+    await deleteAdminBotNote(botId.value, noteDeleteTarget.value.short_id, confirm)
+    noteDeleteOpen.value = false
+    noteViewerOpen.value = false
+    selectedNote.value = null
+    ui.notify('笔记已删除', 'success')
+    await loadNotes(notesPage.value)
+  } catch (error) {
+    if (isConfirmationRequired(error)) {
+      noteDeleteOpen.value = false
+      requestContentConfirmation(errorMessage(error), () => confirmDeleteNote(true))
+      return
+    }
+    noteDeleteOpen.value = false
+    ui.notifyError(errorMessage(error, '删除笔记失败'))
+  } finally {
+    noteDeleting.value = false
   }
 }
 
@@ -1020,6 +1346,15 @@ function resetState(): void {
   conversations.value = []
   conversationsError.value = ''
   activeConversationId.value = ''
+  notes.value = []
+  notesTotal.value = 0
+  notesPage.value = 1
+  notesLoaded.value = false
+  notesError.value = ''
+  noteFilters.q = ''
+  noteFilters.tag = ''
+  noteViewerOpen.value = false
+  noteDeleteOpen.value = false
   memories.value = []
   memoryTotal.value = 0
   memoryPage.value = 1
@@ -1056,6 +1391,7 @@ watch(
 
 watch(activeTab, (tab) => {
   if (tab === 'memories' && !memoryLoaded.value) void loadMemories(1)
+  if (tab === 'notes' && !notesLoaded.value) void loadNotes(1)
 })
 </script>
 
@@ -1104,6 +1440,24 @@ watch(activeTab, (tab) => {
   flex: 0 0 auto;
   padding: 0 12px;
   border-bottom: 1px solid var(--console-border);
+}
+
+.content-tabs :deep(.v-tab) {
+  height: 40px !important;
+  min-height: 40px !important;
+  padding-inline: 14px !important;
+  font-size: 13.5px !important;
+  text-transform: none;
+  border-radius: 8px 8px 0 0;
+}
+
+.content-tabs :deep(.v-tab--selected) {
+  background: rgba(60, 150, 202, 0.12);
+  color: rgb(var(--v-theme-primary));
+}
+
+.content-tabs :deep(.v-tab__slider) {
+  height: 2px;
 }
 
 .drawer-body {
@@ -1385,6 +1739,55 @@ watch(activeTab, (tab) => {
 .memory-actions {
   display: flex;
   flex-shrink: 0;
+}
+
+.note-short {
+  font-size: 0.7rem;
+}
+
+.note-viewer-card {
+  padding: 8px;
+}
+
+.note-viewer-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 18px;
+  font-weight: 650;
+  padding: 12px 20px 0;
+}
+
+.note-viewer-meta {
+  font-size: 12px;
+  margin-bottom: 10px;
+  overflow-wrap: anywhere;
+}
+
+.note-viewer-body {
+  margin: 0;
+  padding: 12px;
+  background: var(--console-surface-variant);
+  border: 1px solid var(--console-border);
+  border-radius: 8px;
+  color: var(--console-text);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 52vh;
+  overflow-y: auto;
+}
+
+.note-viewer-more {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  font-size: 12px;
 }
 
 .memory-footer {

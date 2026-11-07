@@ -70,10 +70,17 @@ class BotService:
             "conf_id": row["conf_id"],
             "memory_db": row["memory_db"],
             "enabled": row["status"] == "ready",
+            "admin_disabled": bool(row.get("admin_disabled")),
+            # ``disabled_reason`` is the canonical name; the console also reads
+            # ``admin_disabled_reason``.
+            "admin_disabled_reason": row.get("disabled_reason") or "",
+            "disabled_reason": row.get("disabled_reason") or "",
+            "disabled_at": int(row.get("disabled_at") or 0),
             "bound": bound,
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
             "last_active_at": row["last_active_at"],
+            "settings": snapshot.get("settings") or {},
             "qr": None,
         }
 
@@ -178,6 +185,7 @@ class BotService:
                 status=409,
             )
         snapshot = self.templates.snapshot(template_id)
+        snapshot.setdefault("settings", {})
         bot_id = f"b_{uuid.uuid4().hex}"
         persona_name = f"saas_{bot_id}"
         conf_name = f"{name}-{bot_id[-6:]}"
@@ -263,6 +271,10 @@ class BotService:
         )
         return self.get(bot_id)
 
+    def quota_for(self, user_id: str) -> dict[str, int]:
+        """Public quota lookup (used by the pre-Bot QR session flow)."""
+        return self._quota_for(user_id)
+
     def _quota_for(self, user_id: str) -> dict[str, int]:
         row = self.db.query_one("SELECT * FROM quotas WHERE user_id = ?", (user_id,))
         if row is None:
@@ -341,6 +353,14 @@ class BotService:
         row = self._row_for_user(user_id, bot_id)
         if row["status"] in {"creating", "deleting"}:
             raise Conflict("Bot 正在创建/删除中，请稍后", code="bot_state_invalid")
+        if enabled and int(row.get("admin_disabled") or 0):
+            reason = str(row.get("disabled_reason") or "")
+            message = "该 Bot 已被管理员停用，不能自行启用"
+            if reason:
+                message = f"{message}：{reason}"
+            raise AppError(
+                message, code="admin_disabled", status=403, extra={"reason": reason}
+            )
         if row["status"] == "pending_qr" and enabled:
             raise Conflict("请先完成扫码接入", code="bot_state_invalid")
         await self.port.set_platform_enabled(bot_id, bool(enabled))
@@ -432,6 +452,105 @@ class BotService:
                 detail={"count": count},
             )
         return count
+
+    # -- admin disable / ban restore -----------------------------------
+    async def admin_set_disabled(
+        self,
+        bot_id: str,
+        disabled: bool,
+        reason: str = "",
+        *,
+        actor_id: str = "",
+        actor_role: str = "admin",
+        ip: str = "",
+    ) -> dict[str, Any]:
+        """Admin-level stop/start, independent from the owner's enabled toggle."""
+        row = self._fetch(bot_id)
+        if row is None or row["status"] == "deleted":
+            raise NotFound("Bot 不存在")
+        if row["status"] in {"creating", "deleting"}:
+            raise Conflict("Bot 正在创建/删除中，请稍后", code="bot_state_invalid")
+        reason = str(reason or "").strip()[:500]
+        now = self.clock.now()
+        if disabled:
+            await self._safe(self.port.set_platform_enabled, bot_id, False)
+            self.db.execute(
+                "UPDATE bots SET status = 'disabled', admin_disabled = 1, "
+                "disabled_reason = ?, disabled_at = ?, updated_at = ? WHERE id = ?",
+                (reason, now, now, bot_id),
+            )
+            action = "bot.admin_disabled"
+        else:
+            bound = self.db.query_one(
+                "SELECT 1 AS hit FROM bot_bindings WHERE bot_id = ?", (bot_id,)
+            )
+            new_status = "ready" if bound is not None else "pending_qr"
+            if new_status == "ready":
+                await self._safe(self.port.set_platform_enabled, bot_id, True)
+            self.db.execute(
+                "UPDATE bots SET status = ?, admin_disabled = 0, disabled_reason = '', "
+                "disabled_at = 0, updated_at = ? WHERE id = ?",
+                (new_status, now, bot_id),
+            )
+            action = "bot.admin_enabled"
+        self.audit.log(
+            actor_id=actor_id or "system",
+            actor_role=actor_role,
+            action=action,
+            target_type="bot",
+            target_id=bot_id,
+            ip=ip,
+            detail={"reason": reason, "disabled": bool(disabled)},
+        )
+        return self.get(bot_id)
+
+    async def admin_disable_user_bots(
+        self, user_id: str, reason: str = "", *, actor_id: str = "", ip: str = ""
+    ) -> list[str]:
+        """Ban side effect: only bots that were *enabled* are stopped/snapshotted."""
+        reason = str(reason or "").strip()[:500]
+        rows = self.db.query(
+            "SELECT id FROM bots WHERE user_id = ? AND status = 'ready'",
+            (user_id,),
+        )
+        bot_ids = [row["id"] for row in rows]
+        now = self.clock.now()
+        for bot_id in bot_ids:
+            await self._safe(self.port.set_platform_enabled, bot_id, False)
+            self.db.execute(
+                "UPDATE bots SET status = 'disabled', admin_disabled = 1, "
+                "disabled_reason = ?, disabled_at = ?, updated_at = ? WHERE id = ?",
+                (reason, now, now, bot_id),
+            )
+        return bot_ids
+
+    async def restore_banned_bots(
+        self,
+        user_id: str,
+        bot_ids: list[str],
+        *,
+        actor_id: str = "",
+        ip: str = "",
+    ) -> list[str]:
+        """Unban side effect: restore only the bots snapshotted at ban time."""
+        restored: list[str] = []
+        now = self.clock.now()
+        for bot_id in bot_ids or []:
+            row = self.db.query_one(
+                "SELECT id, status FROM bots WHERE id = ? AND user_id = ? "
+                "AND status != 'deleted'",
+                (bot_id, user_id),
+            )
+            if row is None or row["status"] not in {"disabled", "ready"}:
+                continue
+            await self._safe(self.port.set_platform_enabled, bot_id, True)
+            self.db.execute(
+                "UPDATE bots SET status = 'ready', admin_disabled = 0, "
+                "disabled_reason = '', disabled_at = 0, updated_at = ? WHERE id = ?",
+                (now, bot_id),
+            )
+            restored.append(bot_id)
+        return restored
 
     # -- credentials ---------------------------------------------------
     async def store_credentials(

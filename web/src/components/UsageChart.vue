@@ -9,7 +9,7 @@
     <svg
       v-if="points.length"
       class="usage-chart__svg"
-      :viewBox="`0 0 ${WIDTH} ${height}`"
+      :viewBox="`0 0 ${chartWidth} ${height}`"
       role="img"
       :aria-label="`近 ${points.length} 天${valueLabel}`"
       preserveAspectRatio="none"
@@ -23,7 +23,7 @@
 
       <g class="usage-chart__grid">
         <g v-for="line in gridLines" :key="line.value">
-          <line :x1="pad.left" :x2="WIDTH - pad.right" :y1="line.y" :y2="line.y" />
+          <line :x1="pad.left" :x2="chartWidth - pad.right" :y1="line.y" :y2="line.y" />
           <text :x="pad.left - 8" :y="line.y + 4" text-anchor="end">{{ line.label }}</text>
         </g>
       </g>
@@ -97,7 +97,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { UsageDailyPoint } from '@/types'
 import { formatNumber } from '@/utils/format'
 
@@ -112,7 +112,7 @@ const props = withDefaults(
   { height: 210, color: '#3c96ca', valueLabel: '消耗', unit: '点' },
 )
 
-const WIDTH = 720
+const chartWidth = ref(720)
 const pad = { top: 18, right: 18, bottom: 28, left: 52 }
 const gradientId = `usage-grad-${Math.random().toString(36).slice(2, 8)}`
 const root = ref<HTMLElement | null>(null)
@@ -131,7 +131,7 @@ const allZero = computed(() => props.points.every((point) => !Number(point.point
 
 function x(index: number): number {
   const count = Math.max(1, props.points.length - 1)
-  return pad.left + (index / count) * (WIDTH - pad.left - pad.right)
+  return pad.left + (index / count) * (chartWidth.value - pad.left - pad.right)
 }
 
 function y(v: number): number {
@@ -166,10 +166,13 @@ const gridLines = computed(() =>
 const xTicks = computed(() => {
   const points = props.points
   if (!points.length) return []
+  const last = points.length - 1
   const indexes =
-    points.length <= 5
+    points.length <= 3
       ? points.map((_, index) => index)
-      : [0, Math.floor((points.length - 1) / 3), Math.floor(((points.length - 1) * 2) / 3), points.length - 1]
+      : chartWidth.value < 460
+        ? [0, Math.floor(last / 2), last]
+        : [0, Math.floor(last / 3), Math.floor((last * 2) / 3), last]
   return [...new Set(indexes)].map((index, order, list) => ({
     index,
     label: points[index].date.slice(5),
@@ -180,20 +183,48 @@ const xTicks = computed(() => {
 const tooltipStyle = computed(() => {
   const index = hoverIndex.value
   if (index < 0 || !props.points.length) return {}
-  const ratio = x(index) / WIDTH
-  const left = Math.min(0.82, Math.max(0.04, ratio))
+  const pointX = x(index)
+  const pointY = y(value(index))
+  const half = 110
+  const left = Math.min(
+    Math.max(half, pointX),
+    Math.max(half, chartWidth.value - half),
+  )
+  // 点太靠上时翻到点下方，避免 tooltip 溢出容器顶部
+  const showBelow = pointY < 90
   return {
-    left: `${left * 100}%`,
-    transform: left > 0.6 ? 'translateX(-100%)' : 'translateX(0)',
+    left: `${left}px`,
+    top: `${showBelow ? pointY + 14 : pointY - 10}px`,
+    transform: showBelow ? 'translate(-50%, 0)' : 'translate(-50%, -100%)',
   }
+})
+
+let resizeObserver: ResizeObserver | null = null
+
+onMounted(() => {
+  const element = root.value
+  if (!element) return
+  chartWidth.value = Math.max(320, Math.round(element.clientWidth || 720))
+  if (typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width ?? element.clientWidth
+      if (width > 0) chartWidth.value = Math.max(320, Math.round(width))
+    })
+    resizeObserver.observe(element)
+  }
+})
+
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
+  resizeObserver = null
 })
 
 function onMove(event: MouseEvent): void {
   if (!props.points.length || !root.value) return
   const rect = root.value.getBoundingClientRect()
-  const relative = ((event.clientX - rect.left) / rect.width) * WIDTH
+  const relative = ((event.clientX - rect.left) / rect.width) * chartWidth.value
   const count = Math.max(1, props.points.length - 1)
-  const index = Math.round(((relative - pad.left) / (WIDTH - pad.left - pad.right)) * count)
+  const index = Math.round(((relative - pad.left) / (chartWidth.value - pad.left - pad.right)) * count)
   hoverIndex.value = Math.max(0, Math.min(props.points.length - 1, index))
 }
 
@@ -206,7 +237,9 @@ function formatCompact(value: number): string {
   const abs = Math.abs(value)
   if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`
   if (abs >= 1000) return `${(value / 1000).toFixed(1)}k`
-  return String(Math.round(value))
+  if (Number.isInteger(value)) return String(value)
+  if (abs >= 10) return String(Math.round(value))
+  return value.toFixed(1)
 }
 
 function formatFullDate(date: string): string {
@@ -237,7 +270,7 @@ function formatFullDate(date: string): string {
 .usage-chart__grid text,
 .usage-chart__x text {
   fill: var(--console-text-muted);
-  font-size: 11.5px;
+  font-size: 9px;
 }
 
 .usage-chart__cursor {
@@ -258,9 +291,9 @@ function formatFullDate(date: string): string {
 
 .usage-chart__tooltip {
   position: absolute;
-  top: 12px;
   z-index: 2;
   min-width: 178px;
+  max-width: 230px;
   padding: 10px 12px;
   border-radius: 10px;
   background: var(--console-surface);

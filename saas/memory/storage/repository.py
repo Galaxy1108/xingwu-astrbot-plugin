@@ -215,7 +215,7 @@ class SqlCipherRepository:
                 draft.effective_memory_type(),
                 draft.content,
                 draft.reasoning,
-                max(1, min(5, int(draft.importance))),
+                max(1, min(6, int(draft.importance))),
                 clamp_strength(draft.strength),
                 1 if draft.pinned else 0,
                 0,
@@ -253,7 +253,7 @@ class SqlCipherRepository:
                 memory.effective_memory_type(),
                 memory.content,
                 memory.reasoning,
-                max(1, min(5, int(memory.importance))),
+                max(1, min(6, int(memory.importance))),
                 clamp_strength(memory.strength),
                 1 if memory.pinned else 0,
                 json.dumps(memory.metadata or {}, ensure_ascii=False),
@@ -342,6 +342,7 @@ class SqlCipherRepository:
         limit: int = 50,
         since: int | None = None,
         until: int | None = None,
+        importance: int | None = None,
     ) -> list[Memory]:
         where = ["m.deleted_at = 0"]
         params: list[Any] = []
@@ -357,6 +358,9 @@ class SqlCipherRepository:
         if until is not None:
             where.append("m.created_at <= ?")
             params.append(int(until))
+        if importance is not None:
+            where.append("m.importance = ?")
+            params.append(int(importance))
         clause = " AND ".join(where)
         params.append(limit)
         if tag:
@@ -428,6 +432,7 @@ class SqlCipherRepository:
         *,
         kind: str | None = None,
         tag: str | None = None,
+        importance: int | None = None,
     ) -> int:
         where = ["m.deleted_at = 0"]
         params: list[Any] = []

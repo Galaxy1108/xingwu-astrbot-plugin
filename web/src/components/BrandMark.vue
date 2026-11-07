@@ -1,0 +1,43 @@
+<template>
+  <svg
+    class="brand-mark-svg"
+    :width="size"
+    :height="size"
+    viewBox="0 0 40 40"
+    role="img"
+    aria-label="星坞"
+  >
+    <defs>
+      <linearGradient :id="gradientId" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#59aee0" />
+        <stop offset="100%" stop-color="#2f7ba6" />
+      </linearGradient>
+    </defs>
+    <rect width="40" height="40" rx="11" :fill="`url(#${gradientId})`" />
+    <path
+      d="M20 9.5c5.5 0 10 4.2 10 9.5 0 5.2-4.5 9.5-10 9.5-1.7 0-3.4-.4-4.8-1.2L9.5 29l1.4-4.7A9.3 9.3 0 0 1 10 19c0-5.3 4.5-9.5 10-9.5Z"
+      fill="none"
+      stroke="#fff"
+      stroke-width="2"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M20 13.4l1.7 3.1 3.5.6-2.5 2.5.6 3.5-3.3-1.7-3.3 1.7.6-3.5-2.5-2.5 3.5-.6L20 13.4Z"
+      fill="#fff"
+    />
+  </svg>
+</template>
+
+<script setup lang="ts">
+import { useId } from 'vue'
+
+withDefaults(defineProps<{ size?: number }>(), { size: 24 })
+const gradientId = `brand-grad-${useId()}`
+</script>
+
+<style scoped>
+.brand-mark-svg {
+  display: block;
+  flex: 0 0 auto;
+}
+</style>

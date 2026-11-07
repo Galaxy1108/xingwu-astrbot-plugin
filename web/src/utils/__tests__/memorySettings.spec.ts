@@ -104,6 +104,8 @@ describe('记忆 API 设置 · 掩码合并', () => {
       rerank_candidate_limit: 20,
       rrf_k: 42,
       recall_top_k: 5,
+      auto_inject: true,
+      auto_extract: true,
     })
   })
 

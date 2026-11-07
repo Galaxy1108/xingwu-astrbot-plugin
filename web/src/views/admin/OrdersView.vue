@@ -150,15 +150,6 @@
             class="mb-2"
           />
           <v-text-field
-            v-model="orderForm.amount_cny"
-            label="金额（¥，可选）"
-            type="number"
-            min="0"
-            step="0.01"
-            :error-messages="orderErrors.amount_cny"
-            class="mb-2"
-          />
-          <v-text-field
             v-model="orderForm.external_ref"
             label="外部单号（可选，用于防重）"
             hint="相同外部单号重复创建会返回已有订单，不会重复入账"
@@ -296,9 +287,8 @@ const createError = ref('')
 const orderForm = reactive<OrderFormState>({
   user_id: '',
   credits: '',
-  amount_cny: '',
   external_ref: '',
-  note: '',
+  note: '', 
 })
 const orderErrors = reactive<OrderFormErrors>({})
 
@@ -400,7 +390,6 @@ function openCreate(): void {
   Object.assign(orderForm, {
     user_id: '',
     credits: '',
-    amount_cny: '',
     external_ref: '',
     note: '',
   })
@@ -413,7 +402,6 @@ function openCreate(): void {
 function clearOrderErrors(): void {
   orderErrors.user_id = undefined
   orderErrors.credits = undefined
-  orderErrors.amount_cny = undefined
 }
 
 async function submitCreate(): Promise<void> {

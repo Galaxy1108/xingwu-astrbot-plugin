@@ -135,14 +135,22 @@ async def test_admin_content_view_writes_access_log(admin_api, container):
     user = container.auth.create_user("contentview@example.com")
     bot = await _bot_for_user(container, user["id"], "内容Bot")
     response, body = await admin_api.get(f"/api/admin/bots/{bot['id']}/conversations")
+    assert response.status == 403
+    assert body["error"]["code"] == "confirmation_required"
+    response, body = await admin_api.get(
+        f"/api/admin/bots/{bot['id']}/conversations?confirm=1"
+    )
     assert response.status == 200
     assert body["data"]["items"][0]["history"][0]["content"].startswith("我喜欢")
-    response, body = await admin_api.get(f"/api/admin/bots/{bot['id']}/memories")
+    response, body = await admin_api.get(
+        f"/api/admin/bots/{bot['id']}/memories?confirm=1"
+    )
     assert response.status == 200
     rows = container.db.query(
         "SELECT * FROM content_access_logs WHERE bot_id = ?", (bot["id"],)
     )
     assert {row["resource"] for row in rows} == {"conversation", "memory"}
+    assert {row["reason"] for row in rows} == {"confirmed_encrypted"}
     # user-side access log is queryable from the same table
     log = container.audit.access_log(user_id=user["id"])
     assert log["total"] >= 2

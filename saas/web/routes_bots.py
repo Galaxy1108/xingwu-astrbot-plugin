@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from aiohttp import web
 
 from ..errors import AppError, NotFound, ValidationError
@@ -65,6 +67,12 @@ async def patch_bot(request: web.Request) -> web.Response:
     user = current_user(request)
     bot_id = request.match_info["bot_id"]
     bot = _owned(container, request, bot_id)
+    if body.get("enabled") is True and bot.get("admin_disabled"):
+        reason = str(bot.get("disabled_reason") or "")
+        message = "该 Bot 已被管理员停用，不能自行启用"
+        if reason:
+            message = f"{message}：{reason}"
+        raise AppError(message, code="admin_disabled", status=403, extra={"reason": reason})
     if "name" in body and body["name"] is not None:
         bot = await container.bots.rename(
             user_id=user["id"],
@@ -79,6 +87,72 @@ async def patch_bot(request: web.Request) -> web.Response:
             enabled=bool(body["enabled"]),
             ip=client_ip(request),
         )
+    if "settings" in body:
+        incoming = body.get("settings") or {}
+        if not isinstance(incoming, dict):
+            raise ValidationError("settings 必须是对象", field="settings")
+        current = dict((bot.get("settings") or {}))
+        patch_config: dict[str, Any] = {}
+        if "streaming" in incoming:
+            current["streaming"] = bool(incoming["streaming"])
+            patch_config["provider_settings.streaming_response"] = current["streaming"]
+        if "compression_max_turns" in incoming:
+            try:
+                turns = int(incoming["compression_max_turns"])
+            except (TypeError, ValueError):
+                raise ValidationError("compression_max_turns 必须是整数", field="settings") from None
+            if turns < 1 or turns > 100:
+                raise ValidationError("compression_max_turns 需在 1–100", field="settings")
+            current["compression_max_turns"] = turns
+            patch_config["agent_runner.config.compression.max_turns"] = turns
+        if "compression_overflow_strategy" in incoming:
+            strategy = str(incoming["compression_overflow_strategy"] or "")
+            if strategy not in {"truncate_by_turns", "llm_compress"}:
+                raise ValidationError("上下文压缩策略不合法", field="settings")
+            current["compression_overflow_strategy"] = strategy
+            patch_config["agent_runner.config.compression.overflow_strategy"] = strategy
+        if patch_config:
+            try:
+                await container.port.update_config(bot["conf_id"], patch_config)
+            except Exception as exc:  # noqa: BLE001
+                raise AppError("保存 Bot 设置失败", code="config_update_failed", status=502) from exc
+        snapshot = dict(bot.get("snapshot") or {})
+        snapshot["settings"] = current
+        container.db.execute(
+            "UPDATE bots SET snapshot = ?, updated_at = ? WHERE id = ?",
+            (json.dumps(snapshot, ensure_ascii=False), container.clock.now(), bot_id),
+        )
+        container.audit.log(
+            actor_id=user["id"], actor_role=user.get("role", "user"),
+            action="bot.settings_updated", target_type="bot", target_id=bot_id,
+            ip=client_ip(request), detail={"settings": current},
+        )
+        bot = container.bots.get_for_user(user["id"], bot_id)
+    if "model_profile_id" in body:
+        profile_id = str(body.get("model_profile_id") or "").strip()
+        if profile_id:
+            profile = container.db.query_one(
+                "SELECT id FROM model_profiles WHERE id = ? AND enabled = 1",
+                (profile_id,),
+            )
+            if profile is None:
+                raise ValidationError("模型配置不存在或已停用", field="model_profile_id")
+        snapshot = dict(bot.get("snapshot") or {})
+        snapshot["model_profile_id"] = profile_id
+        container.db.execute(
+            "UPDATE bots SET snapshot = ?, updated_at = ? WHERE id = ?",
+            (json.dumps(snapshot, ensure_ascii=False), container.clock.now(), bot_id),
+        )
+        container.audit.log(
+            actor_id=user["id"],
+            actor_role=user.get("role", "user"),
+            action="bot.model_updated",
+            target_type="bot",
+            target_id=bot_id,
+            ip=client_ip(request),
+            detail={"model_profile_id": profile_id},
+        )
+        bot = container.bots.get_for_user(user["id"], bot_id)
     return ok({"bot": _with_qr(container, bot)})
 
 

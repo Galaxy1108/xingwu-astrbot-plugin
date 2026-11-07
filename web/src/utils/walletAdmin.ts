@@ -3,7 +3,6 @@ import type { AdminLedgerAdjustPayload, AdminOrderCreatePayload } from '@/types'
 export interface OrderFormState {
   user_id: string
   credits: string
-  amount_cny: string
   external_ref: string
   note: string
 }
@@ -11,7 +10,6 @@ export interface OrderFormState {
 export interface OrderFormErrors {
   user_id?: string
   credits?: string
-  amount_cny?: string
 }
 
 export interface AdjustFormState {
@@ -27,8 +25,8 @@ export interface AdjustFormErrors {
 }
 
 /**
- * 新建充值单校验：用户必选、credits 正整数（后端只拒绝 0，这里按“充值”语义收紧）、
- * 金额可选但必须是非负数字。
+ * 新建充值单校验：用户必选、credits 正整数（后端只拒绝 0，这里按“充值”语义收紧）。
+ * 点数是唯一计量，不传金额。
  */
 export function validateOrderForm(form: OrderFormState): OrderFormErrors {
   const errors: OrderFormErrors = {}
@@ -43,11 +41,6 @@ export function validateOrderForm(form: OrderFormState): OrderFormErrors {
     else if (credits <= 0) errors.credits = '充值点数必须大于 0'
   }
 
-  const amountText = form.amount_cny.trim()
-  if (amountText) {
-    const amount = Number(amountText)
-    if (!Number.isFinite(amount) || amount < 0) errors.amount_cny = '金额必须是大于等于 0 的数字'
-  }
   return errors
 }
 
@@ -76,8 +69,6 @@ export function buildOrderPayload(form: OrderFormState): AdminOrderCreatePayload
     user_id: form.user_id,
     credits: Number(form.credits),
   }
-  const amountText = form.amount_cny.trim()
-  if (amountText) payload.amount_cny = Number(amountText)
   const externalRef = form.external_ref.trim()
   if (externalRef) payload.external_ref = externalRef
   const note = form.note.trim()

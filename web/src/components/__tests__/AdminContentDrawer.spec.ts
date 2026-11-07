@@ -15,6 +15,9 @@ vi.mock('@/api/admin', () => ({
   deleteAdminBotMemory: vi.fn(),
   exportAdminBotMemories: vi.fn(),
   importAdminBotMemories: vi.fn(),
+  listAdminBotNotes: vi.fn(),
+  readAdminBotNote: vi.fn(),
+  deleteAdminBotNote: vi.fn(),
 }))
 
 import {

@@ -1,6 +1,6 @@
 :root {
-  --font-sans: 'Outfit', 'Noto Sans SC', 'PingFang SC', 'Hiragino Sans GB',
-    'Microsoft YaHei', system-ui, -apple-system, sans-serif;
+  --font-sans: 'Outfit', 'Noto Sans', 'PingFang SC', 'Hiragino Sans GB',
+    'Noto Sans CJK SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, 'Roboto Mono', monospace;
   --console-primary: #3c96ca;
   --console-primary-dark: #2f7ba6;
@@ -14,6 +14,9 @@
   --console-topbar: 56px;
   --console-sidebar: 245px;
   --console-gutter: 32px;
+  --console-danger: #c62828;
+  --console-danger-soft: rgba(198, 40, 40, 0.12);
+  --console-danger-border: rgba(198, 40, 40, 0.36);
 }
 
 .v-theme--light {
@@ -26,6 +29,21 @@
   --console-primary-soft: #eaf4fa;
 }
 
+html[data-theme='dark'],
+html[data-theme='dark'] {
+  --console-bg: #1a1a1a;
+  --console-surface: #242424;
+  --console-surface-variant: #2d2e30;
+  --console-text: #e8eaed;
+  --console-text-muted: rgba(255, 255, 255, 0.56);
+  --console-border: rgba(255, 255, 255, 0.12);
+  --console-primary: #5ba4d4;
+  --console-primary-soft: rgba(91, 164, 212, 0.16);
+  --console-danger: #ff8a80;
+  --console-danger-soft: rgba(255, 82, 82, 0.16);
+  --console-danger-border: rgba(255, 138, 128, 0.45);
+}
+
 .v-theme--dark {
   --console-bg: #1a1a1a;
   --console-surface: #242424;
@@ -35,6 +53,9 @@
   --console-border: rgba(255, 255, 255, 0.12);
   --console-primary: #5ba4d4;
   --console-primary-soft: rgba(91, 164, 212, 0.16);
+  --console-danger: #ff8a80;
+  --console-danger-soft: rgba(255, 82, 82, 0.16);
+  --console-danger-border: rgba(255, 138, 128, 0.45);
 }
 
 html,
@@ -46,6 +67,8 @@ body,
 
 body {
   font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.55;
   color: var(--console-text);
   background: var(--console-bg);
   -webkit-font-smoothing: antialiased;
@@ -116,6 +139,25 @@ a:hover {
 .v-breadcrumbs-item:hover,
 .v-pagination .v-btn:hover {
   text-decoration: none !important;
+}
+
+.content-shell {
+  margin: 8px 0 0 8px;
+  border-top-left-radius: 12px;
+  border: 1px solid var(--console-border);
+  border-right: 0;
+  border-bottom: 0;
+  background: var(--console-bg);
+  min-height: calc(100vh - 64px);
+  box-sizing: border-box;
+}
+
+@media (max-width: 959px) {
+  .content-shell {
+    margin-left: 0;
+    border-left: 0;
+    border-top-left-radius: 0;
+  }
 }
 
 .page-container {
@@ -203,6 +245,22 @@ a:hover {
 
 .v-table {
   background: transparent !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.v-table td,
+.v-table th {
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-number,
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.v-list-item-title {
+  font-size: 14px;
+  font-weight: 500;
 }
 
 /* 管理端表格：表头不竖排；窄屏用横向滚动，最小宽度由各页面设置 */
@@ -212,6 +270,22 @@ a:hover {
 
 .v-table {
   background: transparent !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.v-table td,
+.v-table th {
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-number,
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.v-list-item-title {
+  font-size: 14px;
+  font-weight: 500;
 }
 
 /* 管理端表格：表头不竖排；窄屏用横向滚动，最小宽度由各页面设置 */
@@ -296,4 +370,38 @@ a:hover {
 .v-theme--dark .admin-content-drawer .access-alert,
 .v-theme--dark .admin-content-drawer .encrypted-alert {
   color: var(--console-text);
+}
+
+/* 下拉菜单：统一 surface 背景，hover/selected 只用浅主色 */
+.v-overlay__content .v-list {
+  background: var(--console-surface) !important;
+}
+
+.v-overlay__content .v-list-item {
+  background-color: transparent !important;
+}
+
+.v-overlay__content .v-list-item:hover {
+  background-color: rgba(60, 150, 202, 0.12) !important;
+}
+
+.v-overlay__content .v-list-item--active {
+  background-color: rgba(60, 150, 202, 0.12) !important;
+}
+
+.v-overlay__content .v-list-item--active .v-list-item-title,
+.v-overlay__content .v-list-item--active .v-icon {
+  color: rgb(var(--v-theme-primary));
+}
+
+/* VTab 复用了 v-btn 类，避免被页头/按钮尺寸规则撑大 */
+.v-tab.v-btn {
+  height: 40px;
+  min-height: 40px;
+  font-size: 13.5px;
+  padding-inline: 14px;
+}
+
+.v-theme--dark .v-overlay__content .v-list {
+  background: var(--console-surface) !important;
 }

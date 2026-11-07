@@ -1,8 +1,16 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { fetchMe as fetchMeApi, logoutRequest, requestOtp, updateProfile, verifyOtp } from '@/api/auth'
+import {
+  fetchMe as fetchMeApi,
+  logoutRequest,
+  passwordLogin as passwordLoginApi,
+  passwordRegister as passwordRegisterApi,
+  requestOtp,
+  updateProfile,
+  verifyOtp,
+} from '@/api/auth'
 import { isApiError } from '@/api/client'
-import type { Limits, MeResponse, User } from '@/types'
+import type { Limits, MeResponse, PasswordRegisterPayload, PasswordSessionResult, User } from '@/types'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
@@ -74,8 +82,46 @@ export const useAuthStore = defineStore('auth', () => {
     return result
   }
 
+  function applySession(result: PasswordSessionResult): User {
+    user.value = result.user
+    status.value = 'ready'
+    return result.user
+  }
+
+  async function loginPassword(identifier: string, password: string): Promise<User> {
+    const result = await passwordLoginApi(identifier, password)
+    applySession(result)
+    try {
+      await refreshMe()
+    } catch {
+      /* 登录已成功；limits 拉取失败不影响会话 */
+    }
+    return result.user
+  }
+
+  async function registerPassword(payload: PasswordRegisterPayload): Promise<User> {
+    const result = await passwordRegisterApi(payload)
+    applySession(result)
+    try {
+      await refreshMe()
+    } catch {
+      /* 注册已成功；limits 拉取失败不影响会话 */
+    }
+    return result.user
+  }
+
+  async function refreshMe(): Promise<boolean> {
+    return fetchMe()
+  }
+
   async function updateDisplayName(displayName: string) {
-    const result = await updateProfile(displayName)
+    const result = await updateProfile({ display_name: displayName })
+    if (user.value) user.value = { ...user.value, ...result.user }
+    return result.user
+  }
+
+  async function updateProfileFields(payload: { display_name?: string; username?: string }) {
+    const result = await updateProfile(payload)
     if (user.value) user.value = { ...user.value, ...result.user }
     return result.user
   }
@@ -112,7 +158,11 @@ export const useAuthStore = defineStore('auth', () => {
     ensureLoaded,
     loginRequest,
     loginVerify,
+    loginPassword,
+    registerPassword,
+    refreshMe,
     updateDisplayName,
+    updateProfileFields,
     logout,
     clear,
   }

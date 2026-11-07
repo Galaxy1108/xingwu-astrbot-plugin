@@ -57,7 +57,7 @@ class InMemoryRepository:
             content=draft.content,
             kind=draft.kind,
             reasoning=draft.reasoning,
-            importance=max(1, min(5, int(draft.importance))),
+            importance=max(1, min(6, int(draft.importance))),
             pinned=bool(draft.pinned),
             tags=sorted({t.strip() for t in draft.tags if t and t.strip()}),
             metadata=dict(draft.metadata),
@@ -85,7 +85,7 @@ class InMemoryRepository:
             content=memory.content,
             kind=memory.kind,
             reasoning=memory.reasoning,
-            importance=max(1, min(5, int(memory.importance))),
+            importance=max(1, min(6, int(memory.importance))),
             pinned=bool(memory.pinned),
             tags=sorted({t.strip() for t in memory.tags if t and t.strip()}),
             metadata=dict(memory.metadata),
@@ -140,6 +140,7 @@ class InMemoryRepository:
         limit: int = 50,
         since: int | None = None,
         until: int | None = None,
+        importance: int | None = None,
     ) -> list[Memory]:
         variants = kind_variants(kind)
         items = [
@@ -151,6 +152,7 @@ class InMemoryRepository:
             and (cursor is None or memory.id < cursor)
             and (since is None or memory.created_at >= since)
             and (until is None or memory.created_at <= until)
+            and (importance is None or memory.importance == importance)
         ]
         items.sort(key=lambda item: (item.pinned, item.id), reverse=True)
         return items[:limit]
@@ -190,7 +192,13 @@ class InMemoryRepository:
         hits.sort(key=lambda hit: (hit.score, hit.memory.id), reverse=True)
         return hits[:limit]
 
-    def count(self, *, kind: str | None = None, tag: str | None = None) -> int:
+    def count(
+        self,
+        *,
+        kind: str | None = None,
+        tag: str | None = None,
+        importance: int | None = None,
+    ) -> int:
         variants = kind_variants(kind)
         return sum(
             1
@@ -198,6 +206,7 @@ class InMemoryRepository:
             if not memory.deleted_at
             and (not variants or memory.kind in variants)
             and (tag is None or tag in memory.tags)
+            and (importance is None or memory.importance == importance)
         )
 
     def find_duplicate(self, content: str, *, since: int) -> Memory | None:

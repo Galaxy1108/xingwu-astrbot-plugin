@@ -181,6 +181,25 @@ class AstrBotAdapter:
         new_config.setdefault("admins_id", [])
         return await acm.create_conf(name=conf_name, config=new_config)
 
+    async def update_config(self, conf_id: str, patch: dict[str, Any]) -> None:
+        acm = self.context.astrbot_config_mgr
+        conf = acm.confs.get(conf_id)
+        if conf is None:
+            raise ValueError(f"配置文件不存在：{conf_id}")
+        for path, value in (patch or {}).items():
+            parts = [part for part in str(path).split(".") if part]
+            if not parts:
+                continue
+            target = conf
+            for part in parts[:-1]:
+                child = target.get(part)
+                if not isinstance(child, dict):
+                    child = {}
+                    target[part] = child
+                target = child
+            target[parts[-1]] = value
+        conf.save_config()
+
     async def delete_config(self, conf_id: str) -> None:
         try:
             await self.context.astrbot_config_mgr.delete_conf(conf_id)
@@ -221,6 +240,24 @@ class AstrBotAdapter:
         platform["enable"] = bool(enabled)
         self._save_config()
         await self.context.platform_manager.reload(platform)
+
+    async def finalize_temp_platform(self, *, temp_id: str, bot_id: str) -> None:
+        """Copy provider-specific state from a temporary QR platform.
+
+        The temporary platform was used only to obtain the QR/credentials; the
+        real Bot platform was created bare by :meth:`BotService.create`. Copying
+        non-structural keys preserves provider fields the login registration
+        wrote (tokens/base URLs) before credentials are sealed and applied.
+        """
+        temp = self._find_platform(temp_id)
+        target = self._find_platform(bot_id)
+        if temp is None or target is None:
+            raise ValueError(f"临时或目标平台不存在：{temp_id} -> {bot_id}")
+        for key, value in temp.items():
+            if key in {"id", "type", "enable"}:
+                continue
+            target[key] = value
+        self._save_config()
 
     async def apply_credentials(
         self, *, bot_id: str, platform: str, credentials: dict[str, Any]

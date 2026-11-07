@@ -42,54 +42,58 @@ test('完整用户旅程：登录 → 建 Bot → 扫码上线 → 改名 → �
     await expect(page.getByRole('heading', { name: '我的 Bot' })).toBeVisible()
     await expect(page.getByText('还没有 Bot')).toBeVisible()
 
-    // ---- 3. 新建 Bot：名称 + 平台（默认微信）+ 模板（默认第一个）
-    await page.getByRole('button', { name: '新建 Bot' }).first().click()
-    const createDialog = page.getByRole('dialog')
-    await expect(createDialog).toBeVisible()
-    await createDialog.getByLabel('Bot 名称').fill(botName)
-    await expect(createDialog.getByText('默认陪伴').first()).toBeVisible({ timeout: 20_000 })
-    await createDialog.getByRole('button', { name: '创建' }).click()
+    // ---- 3. 扫码接入：命名 + 模板 + 创建并生成二维码（入口统一到「扫码接入」）
+    await page.getByRole('link', { name: '添加机器人' }).first().click()
+    await expect(page).toHaveURL(/\/console\/connect$/)
+    await page.getByLabel('Bot 名称').fill(botName)
+    await expect(page.getByText('默认陪伴').first()).toBeVisible({ timeout: 20_000 })
+    const sessionResponse = page.waitForResponse(
+      (response) =>
+        response.url().includes('/api/qr/sessions') &&
+        response.request().method() === 'POST',
+    )
+    await page.getByRole('button', { name: '创建并生成二维码' }).click()
+    const sessionBody = await (await sessionResponse).json()
+    const sessionId = sessionBody?.data?.session?.id
+    expect(sessionId).toBeTruthy()
 
-    // 创建成功 → 详情页 ?qr=1，自动生成二维码
-    await expect(page).toHaveURL(/\/console\/bots\/b_[0-9a-f]+\?qr=1/, { timeout: 25_000 })
+    await expect(page.getByRole('img', { name: '扫码登录二维码' }).first()).toBeVisible({ timeout: 25_000 })
+    await expect(page.getByText('等待扫码', { exact: true })).toBeVisible()
+    await shot(page, '02-connect-qr')
+
+    // ---- 4. 后端直接完成扫码确认（不依赖 dev 面板）
+    const scanHeaders = await csrfHeaders(context.request)
+    await context.request.post(`/api/dev/qr-sessions/${sessionId}/scanned`, {
+      data: {},
+      headers: scanHeaders,
+    })
+    await context.request.post(`/api/dev/qr-sessions/${sessionId}/confirm`, {
+      data: {},
+      headers: scanHeaders,
+    })
+    await expect(page.getByRole('heading', { name: '已接入' })).toBeVisible({ timeout: 40_000 })
+    const detailHref = await page.getByRole('link', { name: '查看 Bot 详情' }).getAttribute('href')
+    expect(detailHref).toBeTruthy()
+    await page.goto(detailHref!)
+    await expect(page).toHaveURL(/\/console\/bots\/b_[0-9a-f]+/, { timeout: 25_000 })
     botId = botIdFromUrl(page.url())
     await expect(page.getByRole('heading', { name: botName })).toBeVisible()
-    await expect(page.getByRole('img', { name: '扫码登录二维码' })).toBeVisible({ timeout: 25_000 })
-    await expect(page.getByText('等待扫码', { exact: true })).toBeVisible()
-    await shot(page, '02-bot-detail-qr')
-
     // ---- 4. 模拟扫码（dev_mode）→ 手机确认 → 前端轮询到 created 后自动 finalize
-    const headers = await csrfHeaders(context.request)
-    const scanned = await context.request.post(`/api/dev/qr/${botId}/scanned`, {
-      data: {},
-      headers,
-    })
-    expect(scanned.status()).toBe(200)
-    const pollScanned = await context.request.get(`/api/bots/${botId}/qr/poll`)
-    expect((await pollScanned.json()).data.qr.status).toBe('scanned')
-
-    const confirmed = await context.request.post(`/api/dev/qr/${botId}/confirm`, {
-      data: {},
-      headers,
-    })
-    expect(confirmed.status()).toBe(200)
-
-    // finalize 后：状态 ready、已绑定，UI 显示“运行中”
-    await expect(page.getByText('已绑定', { exact: true })).toBeVisible({ timeout: 40_000 })
-    await expect(page.getByText('运行中', { exact: true })).toBeVisible({ timeout: 20_000 })
     const readyBot = await waitForBotStatus(context.request, botId, 'ready')
     expect(readyBot.bound).toBe(true)
     expect(readyBot.enabled).toBe(true)
     await shot(page, '03-bot-ready')
 
-    // ---- 5. 改名：只改展示名，技术字段不变
+    // ---- 5. 改名（设置 tab inline，不弹窗）：只改展示名，技术字段不变
     const confIdBefore = readyBot.conf_id
-    await page.getByRole('button', { name: '修改名称' }).click()
-    const renameDialog = page.getByRole('dialog')
-    await expect(renameDialog.getByLabel('新名称')).toBeVisible()
-    await renameDialog.getByLabel('新名称').fill(newName)
-    await renameDialog.getByRole('button', { name: '保存' }).click()
+    await page.getByTestId('bot-tab-overview').waitFor({ state: 'visible' })
+    await page.getByTestId('bot-settings').click()
+    const settingsName = page.getByTestId('bot-settings-name').locator('input')
+    await settingsName.waitFor({ state: 'visible' })
+    await settingsName.fill(newName)
+    await page.getByTestId('bot-settings-save').click()
     await expect(page.getByRole('heading', { name: newName })).toBeVisible({ timeout: 20_000 })
+    await page.getByTestId('bot-tab-overview').click()
     const renamedBot = (await getBot(context.request, botId)).bot
     expect(renamedBot.name).toBe(newName)
     expect(renamedBot.conf_id).toBe(confIdBefore)
@@ -126,8 +130,7 @@ test('完整用户旅程：登录 → 建 Bot → 扫码上线 → 改名 → �
     const actions = new Set<string>((auditBody.data.items as any[]).map((item) => item.action))
     for (const required of [
       'bot.created',
-      'bot.qr_started',
-      'bot.qr_finalized',
+      'qr_session.finalized',
       'bot.renamed',
       'bot.disabled',
       'bot.enabled',

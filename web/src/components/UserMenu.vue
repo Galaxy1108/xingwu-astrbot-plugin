@@ -47,9 +47,15 @@
       <v-list-item
         v-if="auth.isAdmin && auth.astrbotDashboardUrl"
         prepend-icon="mdi-open-in-new"
-        title="AstrBot 后台"
+        title="后端控制台"
         data-testid="user-menu-astrbot"
         @click="openDashboard"
+      />
+      <v-list-item
+        to="/settings/account"
+        prepend-icon="mdi-account-cog-outline"
+        title="账户设置"
+        data-testid="user-menu-account"
       />
       <v-list-item
         prepend-icon="mdi-account-edit-outline"

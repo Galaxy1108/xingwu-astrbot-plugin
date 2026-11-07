@@ -4,12 +4,12 @@
       <div>
         <h1 class="page-title">额度与账单</h1>
         <p class="page-sub">
-          预付费点数：管理员确认充值后入账，消费按模型用量扣减；余额与流水以 append-only 账本为准。
+          预付费点数：使用管理员发放的兑换码入账，消费按模型用量扣减；余额与流水以 append-only 账本为准。
         </p>
       </div>
       <div class="page-actions">
-        <v-chip variant="tonal" color="primary" prepend-icon="mdi-flask-outline">
-          内测 · 人工充值
+        <v-chip variant="tonal" color="primary" prepend-icon="mdi-ticket-percent-outline">
+          内测 · 仅支持兑换码
         </v-chip>
         <v-btn variant="outlined" size="small" prepend-icon="mdi-refresh" :loading="loading" @click="load">
           刷新
@@ -18,7 +18,7 @@
     </div>
 
     <v-row>
-      <v-col cols="12" md="7">
+      <v-col cols="12" md="5">
         <v-card elevation="0" class="pa-6 h-100 balance-card">
           <div class="text-caption muted mb-1">剩余点数</div>
           <div class="d-flex align-baseline ga-2">
@@ -32,21 +32,46 @@
         </v-card>
       </v-col>
 
-      <v-col cols="12" md="5">
-        <v-card elevation="0" class="pa-6 h-100">
-          <div class="text-subtitle-1 font-weight-bold mb-1">充值说明</div>
-          <p class="text-caption muted mb-4">
-            当前为邀请制内测，额度由平台管理员统一发放；不提供在线支付与自动充值。
+      <v-col cols="12" md="7">
+        <v-card elevation="0" class="pa-6 h-100 redeem-card">
+          <div class="d-flex align-center mb-1">
+            <div class="text-subtitle-1 font-weight-bold">兑换码</div>
+            <v-chip size="x-small" variant="tonal" color="primary" class="ml-2">内测</v-chip>
+          </div>
+          <p class="text-caption muted mb-3">
+            输入管理员发放的兑换码增加点数；同一兑换码仅可使用一次（以服务端校验为准）。
           </p>
-          <ul class="notice-list text-body-2">
-            <li><v-icon size="16" color="primary">mdi-check-circle-outline</v-icon> 联系管理员手动充值，确认后写入账本</li>
-            <li><v-icon size="16" color="primary">mdi-check-circle-outline</v-icon> 同一外部单号 / 幂等键不会重复入账</li>
-            <li><v-icon size="16" color="primary">mdi-check-circle-outline</v-icon> 余额与流水随时可对账，删除账号即停止计费</li>
-          </ul>
-          <v-divider class="my-4" />
-          <div class="d-flex align-center text-caption muted">
+          <form class="redeem-form" @submit.prevent="redeem">
+            <v-text-field
+              v-model.trim="redeemInput"
+              placeholder="SAAS-XXXX-XXXX"
+              prepend-inner-icon="mdi-ticket-outline"
+              density="compact"
+              hide-details
+              :disabled="redeeming"
+              data-testid="redeem-code"
+              class="redeem-input"
+            />
+            <v-btn
+              type="submit"
+              color="primary"
+              variant="tonal"
+              :loading="redeeming"
+              :disabled="!redeemInput || redeeming"
+              data-testid="redeem-submit"
+            >
+              兑换
+            </v-btn>
+          </form>
+          <v-alert v-if="redeemError" type="error" variant="tonal" density="compact" class="mt-3">
+            {{ redeemError }}
+          </v-alert>
+          <v-alert v-if="redeemSuccess" type="success" variant="tonal" density="compact" class="mt-3">
+            {{ redeemSuccess }}
+          </v-alert>
+          <div class="d-flex align-center text-caption muted mt-4">
             <v-icon size="16" class="mr-2">mdi-information-outline</v-icon>
-            合规说明：暂不接入自动充值，避免未经许可的代收代付。
+            内测仅支持兑换码，不提供在线支付与自动充值。
           </div>
         </v-card>
       </v-col>
@@ -89,6 +114,18 @@
         unit="点"
         :height="230"
       />
+    </v-card>
+
+    <v-card elevation="0" class="pa-5 mt-4 payment-card">
+      <div class="text-subtitle-1 font-weight-bold mb-1">支付方式</div>
+      <p class="text-caption muted mb-4">内测仅支持兑换码；以下支付方式暂未开放，不产生任何扣款。</p>
+      <div class="payment-grid">
+        <div v-for="method in paymentMethods" :key="method.name" class="payment-item">
+          <v-icon size="20">{{ method.icon }}</v-icon>
+          <span class="payment-name">{{ method.name }}</span>
+          <v-chip size="x-small" variant="outlined" color="default">暂不支持</v-chip>
+        </div>
+      </div>
     </v-card>
 
     <v-card elevation="0" class="mt-4">
@@ -165,12 +202,15 @@ import { useRoute, useRouter } from 'vue-router'
 import EmptyState from '@/components/EmptyState.vue'
 import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
 import UsageChart from '@/components/UsageChart.vue'
-import { getDailyUsage, getUsageByBot, getWallet, getWalletLedger } from '@/api/wallet'
+import { getDailyUsage, getUsageByBot, getWallet, getWalletLedger, redeemCode } from '@/api/wallet'
 import type { LedgerEntry, UsageByBot, UsageDaily, Wallet } from '@/types'
 import { formatDateTime, formatNumber } from '@/utils/format'
+import { useUiStore } from '@/stores/ui'
+import { isApiError } from '@/api/client'
 
 const route = useRoute()
 const router = useRouter()
+const ui = useUiStore()
 
 const wallet = ref<Wallet | null>(null)
 const daily = ref<UsageDaily | null>(null)
@@ -185,12 +225,25 @@ const error = ref('')
 const range = ref<'30' | '7'>('30')
 const botFilter = ref('')
 
+const redeemInput = ref('')
+const redeeming = ref(false)
+const redeemError = ref('')
+const redeemSuccess = ref('')
+
+const paymentMethods = [
+  { name: '支付宝', icon: 'mdi-alpha-a-circle-outline' },
+  { name: '微信支付', icon: 'mdi-wechat' },
+  { name: '银行卡', icon: 'mdi-credit-card-outline' },
+]
+
 const botOptions = computed(() => [
   { title: '全部 Bot', value: '' },
-  ...byBot.value.map((item) => ({
-    title: item.bot_name || item.bot_id,
-    value: item.bot_id,
-  })),
+  ...byBot.value
+    .filter((item) => Boolean(item.bot_id))
+    .map((item) => ({
+      title: item.bot_name || item.bot_id,
+      value: item.bot_id,
+    })),
 ])
 
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / Math.max(1, pageSize.value))))
@@ -245,6 +298,50 @@ async function loadByBot(): Promise<void> {
     byBot.value = result.items ?? []
   } catch {
     byBot.value = []
+  }
+}
+
+function redeemErrorMessage(error: unknown): string {
+  if (isApiError(error)) {
+    if (error.status === 404 || error.code === 'not_found' || error.code === 'http_error') {
+      return '兑换码功能暂未开放（后端接口未就绪），请稍后再试。'
+    }
+    switch (error.code) {
+      case 'already_redeemed':
+        return '该兑换码已被使用，不能重复兑换。'
+      case 'expired':
+        return '兑换码已过期，请联系管理员重新发放。'
+      case 'invalid':
+        return '兑换码无效，请检查后重试。'
+      default:
+        return error.message || '兑换失败，请稍后重试。'
+    }
+  }
+  return '兑换失败，请稍后重试。'
+}
+
+async function redeem(): Promise<void> {
+  const code = redeemInput.value.trim()
+  redeemError.value = ''
+  redeemSuccess.value = ''
+  if (!code) {
+    redeemError.value = '请输入兑换码'
+    return
+  }
+  redeeming.value = true
+  try {
+    const result = await redeemCode(code)
+    const credits = Number(result.credits ?? 0)
+    redeemSuccess.value = credits > 0
+      ? `兑换成功：+${formatNumber(credits)} 点，已入账。`
+      : '兑换成功，点数已入账。'
+    redeemInput.value = ''
+    ui.notify(redeemSuccess.value, 'success', 5000)
+    await load()
+  } catch (err) {
+    redeemError.value = redeemErrorMessage(err)
+  } finally {
+    redeeming.value = false
   }
 }
 
@@ -417,5 +514,39 @@ function chipColor(type?: string): string {
 
 .table-scroll {
   overflow-x: auto;
+}
+
+.redeem-form {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.redeem-input {
+  flex: 1 1 220px;
+  min-width: 180px;
+}
+
+.payment-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.payment-item {
+  flex: 1 1 180px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--console-border);
+  border-radius: 8px;
+  color: var(--console-text-muted);
+}
+
+.payment-name {
+  flex: 1;
+  font-size: 13px;
 }
 </style>

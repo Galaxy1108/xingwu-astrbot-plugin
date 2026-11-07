@@ -26,7 +26,7 @@
       <span class="text-muted encryption-switch__hint">{{ stateHint }}</span>
     </div>
 
-    <div v-if="total > 0" class="encryption-switch__progress">
+    <div v-if="inProgress && total > 0" class="encryption-switch__progress">
       <v-progress-linear
         :model-value="percent"
         :color="state === 'paused' ? 'error' : 'primary'"
@@ -46,10 +46,6 @@
     >
       当前为明文存储，管理员可查看内容。
     </v-alert>
-
-    <p v-if="readonly" class="encryption-switch__readonly text-muted">
-      M1 仅展示状态；关闭/开启加密的交互已预留，将在 M3 开放。
-    </p>
 
     <slot />
   </v-card>
