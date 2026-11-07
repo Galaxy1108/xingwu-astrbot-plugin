@@ -177,6 +177,17 @@ async def list_models(request: web.Request) -> web.Response:
     return ok({"items": catalog_of(container).public_list()})
 
 
+@routes.get("/api/me/stats")
+async def my_dashboard_stats(request: web.Request) -> web.Response:
+    user = current_user(request)
+    container = container_of(request)
+    try:
+        days = int(request.query.get("days", 30))
+    except (TypeError, ValueError):
+        raise ValidationError("days 必须是整数") from None
+    return ok(metering_of(container).dashboard_stats(user["id"], days=days))
+
+
 @routes.get("/api/me/usage/daily")
 async def my_daily_usage(request: web.Request) -> web.Response:
     user = current_user(request)

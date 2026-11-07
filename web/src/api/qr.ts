@@ -5,6 +5,7 @@ export function createQrSession(payload: {
   platform: Platform
   name: string
   template_id: string
+  model_profile_id?: string
 }): Promise<{ session: QrConnectSession }> {
   return api.post<{ session: QrConnectSession }>('/qr/sessions', payload)
 }

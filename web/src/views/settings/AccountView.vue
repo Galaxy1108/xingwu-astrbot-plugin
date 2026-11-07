@@ -250,6 +250,22 @@
                 </v-btn>
               </template>
             </div>
+            <div v-if="!provider.enabled" class="oauth-disabled-hint">
+              <span class="text-muted">
+                由管理员在「管理后台 → 第三方登录」配置 Client ID/Secret 后启用。
+              </span>
+              <v-btn
+                v-if="auth.isAdmin"
+                size="small"
+                variant="text"
+                color="primary"
+                to="/admin/settings/oauth"
+                data-testid="oauth-admin-config"
+              >
+                去配置
+              </v-btn>
+              <span v-else class="text-muted">请联系管理员启用。</span>
+            </div>
           </div>
           <div v-if="oauthIdentities.length" class="oauth-identities text-muted">
             已绑定：
@@ -594,6 +610,7 @@ async function unbindOAuth(provider: string): Promise<void> {
 
 .oauth-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -612,6 +629,16 @@ async function unbindOAuth(provider: string): Promise<void> {
 .oauth-name {
   font-size: 13px;
   font-weight: 600;
+}
+
+.oauth-disabled-hint {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  line-height: 1.5;
 }
 
 .oauth-identities {

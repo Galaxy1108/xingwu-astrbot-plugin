@@ -94,6 +94,7 @@ test('完整用户旅程：登录 → 建 Bot → 扫码上线 → 改名 → �
     await page.getByTestId('bot-settings-save').click()
     await expect(page.getByRole('heading', { name: newName })).toBeVisible({ timeout: 20_000 })
     await page.getByTestId('bot-tab-overview').click()
+    await expect(page.getByText('运行状态')).toBeVisible({ timeout: 10_000 })
     const renamedBot = (await getBot(context.request, botId)).bot
     expect(renamedBot.name).toBe(newName)
     expect(renamedBot.conf_id).toBe(confIdBefore)
@@ -101,7 +102,7 @@ test('完整用户旅程：登录 → 建 Bot → 扫码上线 → 改名 → �
     await shot(page, '04-bot-renamed')
 
     // ---- 6. 禁用 / 启用（平台实例开关）
-    const switchInput = page.locator('.switch-row input[type="checkbox"]')
+    const switchInput = page.locator('.switch-row input[type="checkbox"]').first()
     await expect(switchInput).toBeChecked()
     await page.locator('.switch-row .v-switch').click()
     await waitForBotStatus(context.request, botId, 'disabled')

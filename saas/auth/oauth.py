@@ -18,6 +18,7 @@ Security model
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Protocol
 from urllib.parse import urlencode
 
@@ -43,6 +44,8 @@ GITHUB_EMAILS_URL = "https://api.github.com/user/emails"
 OAUTH_STATE_TTL_SECONDS = 600
 OAUTH_MODES = {"login", "register", "bind"}
 OAUTH_PROVIDERS: dict[str, str] = {"github": "GitHub"}
+OAUTH_SETTINGS_KEY = "oauth.github"
+OAUTH_SECRET_MASK = "••••••••"
 
 
 class OAuthHttpClient(Protocol):
@@ -176,10 +179,15 @@ class OAuthService:
         audit: Any = None,
         clock: Clock | None = None,
         client: OAuthHttpClient | None = None,
+        settings_store: Any = None,
         state_ttl_seconds: int = OAUTH_STATE_TTL_SECONDS,
     ) -> None:
         self.db = db
         self.settings = settings
+        # Optional encrypted platform settings; ``oauth.github`` overrides the
+        # env/plugin-config values so an administrator can enable GitHub OAuth
+        # from the console without a restart.
+        self.settings_store = settings_store
         self.auth = auth
         self.invites = invites
         self.sessions = sessions
@@ -199,11 +207,61 @@ class OAuthService:
             raise ValidationError("不支持的第三方登录方式", field="provider")
         return value
 
-    def _github_enabled(self) -> bool:
-        return bool(
-            str(self.settings.github_client_id or "").strip()
-            and str(self.settings.github_client_secret or "").strip()
+    def _stored_github(self) -> dict[str, Any]:
+        if self.settings_store is None:
+            return {}
+        value = self.settings_store.get(OAUTH_SETTINGS_KEY)
+        return dict(value) if isinstance(value, dict) else {}
+
+    @staticmethod
+    def _pick(stored: dict[str, Any], key: str, fallback: Any) -> str:
+        value = stored.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        return str(fallback or "").strip()
+
+    def github_config(self) -> dict[str, str]:
+        """Effective GitHub credentials: encrypted store first, Settings second."""
+        stored = self._stored_github()
+        return {
+            "client_id": self._pick(stored, "client_id", self.settings.github_client_id),
+            "client_secret": self._pick(
+                stored, "client_secret", self.settings.github_client_secret
+            ),
+            "redirect_uri": self._pick(
+                stored, "redirect_uri", self.settings.github_redirect_uri
+            ),
+        }
+
+    def _client_settings(self) -> Settings:
+        """Settings view with the effective GitHub credentials for network calls."""
+        config = self.github_config()
+        if (
+            config["client_id"] == str(self.settings.github_client_id or "").strip()
+            and config["client_secret"]
+            == str(self.settings.github_client_secret or "").strip()
+            and config["redirect_uri"]
+            == str(self.settings.github_redirect_uri or "").strip()
+        ):
+            return self.settings
+        return replace(
+            self.settings,
+            github_client_id=config["client_id"],
+            github_client_secret=config["client_secret"],
+            github_redirect_uri=config["redirect_uri"],
         )
+
+    def _stored_enabled(self) -> bool:
+        """Admin on/off switch (absent = enabled once credentials exist)."""
+        return bool(self._stored_github().get("enabled", True))
+
+    def _github_enabled(self) -> bool:
+        config = self.github_config()
+        return bool(config["client_id"] and config["client_secret"]) and self._stored_enabled()
+
+    def github_enabled(self) -> bool:
+        """Public flag used by the admin settings page."""
+        return self._github_enabled()
 
     def _require_enabled(self, provider: str) -> str:
         value = self._provider(provider)
@@ -226,12 +284,11 @@ class OAuthService:
     def _authorize_url(
         self, provider: str, state: str, *, callback_url: str = ""
     ) -> str:
+        config = self.github_config()
         # Configured redirect URI wins; only fall back to the request origin.
-        redirect_uri = str(self.settings.github_redirect_uri or "").strip()
-        if not redirect_uri:
-            redirect_uri = callback_url
+        redirect_uri = config["redirect_uri"] or callback_url
         params = {
-            "client_id": str(self.settings.github_client_id or ""),
+            "client_id": config["client_id"],
             "scope": "read:user user:email",
             "state": state,
         }
@@ -412,18 +469,20 @@ class OAuthService:
                 status=400,
                 field="code",
             )
-        redirect_uri = str(self.settings.github_redirect_uri or "").strip() or callback_url
+        config = self.github_config()
+        redirect_uri = config["redirect_uri"] or callback_url
+        client_settings = self._client_settings()
         try:
             token = await self.client.exchange_code(
                 provider,
                 code,
-                self.settings,
+                client_settings,
                 redirect_uri=redirect_uri,
             )
         except TypeError:  # injected clients may use the 3-arg signature
-            token = await self.client.exchange_code(provider, code, self.settings)
+            token = await self.client.exchange_code(provider, code, client_settings)
         identity = await self.client.fetch_identity(
-            provider, str(token), self.settings
+            provider, str(token), client_settings
         )
         subject = str((identity or {}).get("subject") or "").strip()
         login = str((identity or {}).get("login") or "").strip()
@@ -589,6 +648,8 @@ class OAuthService:
 
 __all__ = [
     "GITHUB_AUTHORIZE_URL",
+    "OAUTH_SECRET_MASK",
+    "OAUTH_SETTINGS_KEY",
     "HttpOAuthClient",
     "OAUTH_STATE_TTL_SECONDS",
     "OAuthHttpClient",

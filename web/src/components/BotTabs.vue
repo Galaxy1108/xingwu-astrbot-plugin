@@ -1,8 +1,9 @@
 <template>
   <div class="bot-tabs" role="tablist" aria-label="Bot 导航">
     <button
-      v-for="item in tabs"
+      v-for="(item, index) in tabs"
       :key="item.key"
+      :ref="(el) => setTabRef(el as HTMLButtonElement | null, index)"
       type="button"
       class="bot-tab"
       :class="{ 'bot-tab--active': item.key === active }"
@@ -14,10 +15,12 @@
       <v-icon size="16">{{ item.icon }}</v-icon>
       {{ item.label }}
     </button>
+    <span class="bot-tab-indicator" :style="indicatorStyle" aria-hidden="true" />
   </div>
 </template>
 
 <script setup lang="ts">
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 type BotTabKey = 'overview' | 'conversations' | 'memory' | 'notes' | 'settings'
@@ -28,6 +31,34 @@ const props = defineProps<{
 }>()
 
 const router = useRouter()
+const tabEls = ref<Array<HTMLButtonElement | null>>([])
+const indicatorStyle = ref<Record<string, string>>({})
+const activeIndex = () => tabs.findIndex((item) => item.key === props.active)
+
+function setTabRef(el: HTMLButtonElement | null, index: number): void {
+  tabEls.value[index] = el
+}
+
+function updateIndicator(): void {
+  const el = tabEls.value[Math.max(0, activeIndex())]
+  if (!el) return
+  indicatorStyle.value = {
+    width: `${el.offsetWidth}px`,
+    transform: `translateX(${el.offsetLeft}px)`,
+  }
+}
+
+onMounted(() => {
+  void nextTick(updateIndicator)
+  window.addEventListener('resize', updateIndicator)
+})
+
+onBeforeUnmount(() => window.removeEventListener('resize', updateIndicator))
+
+watch(
+  () => props.active,
+  () => void nextTick(updateIndicator),
+)
 
 const tabs: Array<{
   key: BotTabKey
@@ -62,6 +93,7 @@ function go(item: (typeof tabs)[number]): void {
 
 <style scoped>
 .bot-tabs {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -70,6 +102,17 @@ function go(item: (typeof tabs)[number]): void {
   border-bottom: 1px solid var(--console-border);
   overflow-x: auto;
   scrollbar-width: none;
+}
+
+.bot-tab-indicator {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: rgb(var(--v-theme-primary));
+  transition: transform 0.22s ease, width 0.22s ease;
+  pointer-events: none;
 }
 
 .bot-tabs::-webkit-scrollbar {
@@ -106,7 +149,6 @@ function go(item: (typeof tabs)[number]): void {
 .bot-tab--active {
   color: rgb(var(--v-theme-primary));
   background: rgba(60, 150, 202, 0.12);
-  box-shadow: inset 0 -2px 0 rgb(var(--v-theme-primary));
 }
 
 @media (max-width: 599px) {

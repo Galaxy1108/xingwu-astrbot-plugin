@@ -43,6 +43,7 @@ async def create_qr_session(request: web.Request) -> web.Response:
         platform=str(body.get("platform") or ""),
         name=str(body.get("name") or ""),
         template_id=str(body.get("template_id") or ""),
+        model_profile_id=str(body.get("model_profile_id") or ""),
         ip=client_ip(request),
     )
     return ok(data, status=201)

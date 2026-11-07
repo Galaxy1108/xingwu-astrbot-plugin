@@ -5,22 +5,24 @@
       :description="bot ? `${platformLabel(bot.platform)} · ${bot.template_name || '自定义模板'}` : '查看与维护 Bot 的基础信息、运行状态与设置。'"
       back-to="/bots"
     >
-      <template #actions>
-        <StatusChip v-if="bot" :status="bot.status" />
-        <v-btn
-          icon
-          variant="text"
-          aria-label="刷新"
-          title="刷新"
-          :loading="loading"
-          @click="reload"
-        >
-          <v-icon>mdi-refresh</v-icon>
-        </v-btn>
-      </template>
+
     </PageHeader>
 
     <BotTabs :bot-id="botId" :active="activeTab" />
+
+    <div class="content-toolbar">
+      <StatusChip v-if="bot" :status="bot.status" />
+      <v-spacer />
+      <v-btn
+        variant="text"
+        size="small"
+        prepend-icon="mdi-refresh"
+        :loading="loading"
+        @click="reload"
+      >
+        刷新
+      </v-btn>
+    </div>
 
     <v-alert v-if="loadError" type="error" variant="tonal" class="mb-4">
       <div class="alert-row">
@@ -61,33 +63,42 @@
         </div>
       </v-alert>
 
+      <transition name="tab-fade" mode="out-in">
+        <div :key="activeTab">
       <template v-if="activeTab === 'settings'">
         <v-alert v-if="settingsError" type="error" variant="tonal" class="mb-4">
           {{ settingsError }}
         </v-alert>
 
         <v-card class="panel settings-panel">
-          <h2 class="section-title">基础设置</h2>
-          <v-text-field
-            v-model.trim="settingsName"
-            label="名称"
-            counter="32"
-            maxlength="32"
-            class="mb-3"
-            data-testid="bot-settings-name"
-          />
-          <v-select
-            v-model="settingsModelId"
-            :items="modelOptions"
-            item-title="title"
-            item-value="value"
-            label="模型配置"
-            :loading="modelsLoading"
-            no-data-text="暂无可用模型配置"
-            hint="来自管理端「模型与定价」；留空表示沿用模板 / 基础配置"
-            persistent-hint
-            class="mb-5"
-          />
+          <div class="settings-section-head">
+            <h2 class="section-title">基础设置</h2>
+            <p class="text-muted settings-desc">修改后立即影响该 Bot，不会改动来源模板。</p>
+          </div>
+          <v-row dense>
+            <v-col cols="12" sm="6">
+              <v-text-field
+                v-model.trim="settingsName"
+                label="名称"
+                counter="32"
+                maxlength="32"
+                data-testid="bot-settings-name"
+              />
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-select
+                v-model="settingsModelId"
+                :items="modelOptions"
+                item-title="title"
+                item-value="value"
+                label="模型配置"
+                :loading="modelsLoading"
+                no-data-text="暂无可用模型配置"
+                hint="留空表示沿用模板 / 基础配置"
+                persistent-hint
+              />
+            </v-col>
+          </v-row>
           <div class="switch-row">
             <div>
               <div class="switch-label">启用平台实例</div>
@@ -124,6 +135,9 @@
               data-testid="bot-settings-streaming"
             />
           </div>
+          <p class="settings-global-note text-muted">
+            自动记忆 / 主动注入目前是全局「记忆 API 设置」，尚未提供 per-bot 开关；本页只保存后端支持的 Bot 级配置。
+          </p>
         </v-card>
 
         <v-card class="panel settings-panel mt-4">
@@ -134,7 +148,8 @@
             <v-spacer />
             <v-icon size="20">{{ advancedOpen ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
           </button>
-          <div v-if="advancedOpen" class="advanced-body">
+          <v-expand-transition>
+            <div v-if="advancedOpen" class="advanced-body">
             <v-row dense>
               <v-col cols="12" sm="6">
                 <v-text-field
@@ -162,10 +177,12 @@
             <p class="advanced-note text-muted">
               truncate_by_turns 按轮次截断较早消息；llm_compress 会调用模型总结较早对话，可能产生额外 Token 消耗。
             </p>
-          </div>
+            </div>
+          </v-expand-transition>
         </v-card>
 
-        <div class="settings-actions">
+        <div class="settings-savebar">
+          <span class="text-muted">基础设置与高级设置统一保存</span>
           <v-btn
             color="primary"
             variant="tonal"
@@ -259,6 +276,8 @@
         </v-btn>
       </v-card>
       </template>
+        </div>
+      </transition>
     </template>
 
     <ReasonDialog
@@ -539,6 +558,43 @@ async function onDelete(): Promise<void> {
 
 .settings-panel {
   padding: 20px;
+  background: var(--console-surface);
+}
+
+.settings-section-head {
+  margin-bottom: 14px;
+}
+
+.settings-desc {
+  margin: 4px 0 0;
+  font-size: 12px;
+}
+
+.settings-global-note {
+  margin: 14px 0 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.settings-savebar {
+  position: sticky;
+  bottom: 12px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--console-border);
+  border-radius: 10px;
+  background: var(--console-surface);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.07);
+  font-size: 12px;
+}
+
+.settings-panel:has(.advanced-toggle) {
+  background: linear-gradient(180deg, var(--console-surface), var(--console-surface-variant));
 }
 
 .advanced-toggle {
@@ -805,6 +861,43 @@ async function onDelete(): Promise<void> {
 
 .settings-panel {
   padding: 20px;
+  background: var(--console-surface);
+}
+
+.settings-section-head {
+  margin-bottom: 14px;
+}
+
+.settings-desc {
+  margin: 4px 0 0;
+  font-size: 12px;
+}
+
+.settings-global-note {
+  margin: 14px 0 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.settings-savebar {
+  position: sticky;
+  bottom: 12px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--console-border);
+  border-radius: 10px;
+  background: var(--console-surface);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.07);
+  font-size: 12px;
+}
+
+.settings-panel:has(.advanced-toggle) {
+  background: linear-gradient(180deg, var(--console-surface), var(--console-surface-variant));
 }
 
 .advanced-toggle {

@@ -5,21 +5,28 @@
       description="笔记与记忆分开管理：用于保存长文本资料，可按正文分页查看。"
       :back-to="`/bots/${botId}`"
     >
-      <template #actions>
-        <v-btn variant="text" prepend-icon="mdi-refresh" :loading="loading" @click="load">刷新</v-btn>
-        <v-btn
-          color="primary"
-          variant="tonal"
-          prepend-icon="mdi-plus"
-          data-testid="note-create"
-          @click="openCreate"
-        >
-          新建笔记
-        </v-btn>
-      </template>
+
     </PageHeader>
 
     <BotTabs :bot-id="botId" active="notes" />
+
+    <div class="content-toolbar">
+      <span class="text-muted toolbar-hint">长文本资料与记忆分开管理</span>
+      <v-spacer />
+      <v-btn size="small" variant="text" prepend-icon="mdi-refresh" :loading="loading" @click="load">
+        刷新
+      </v-btn>
+      <v-btn
+        size="small"
+        color="primary"
+        variant="tonal"
+        prepend-icon="mdi-plus"
+        data-testid="note-create"
+        @click="openCreate"
+      >
+        新建笔记
+      </v-btn>
+    </div>
 
     <v-card class="filter-card mb-4">
       <form class="filter-row" @submit.prevent="applyFilters">
@@ -414,6 +421,10 @@ async function confirmDelete(): Promise<void> {
 </script>
 
 <style scoped>
+.toolbar-hint {
+  font-size: 12px;
+}
+
 .filter-card {
   padding: 14px 16px;
 }

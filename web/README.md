@@ -73,6 +73,17 @@ src/
 - 图表改为按容器实际宽度渲染 viewBox，轴/日期字号 9px；Bot 下拉过滤空 bot_id；菜单/弹窗/tab 样式统一（菜单 surface、选中浅主色；ConfirmDialog surface/12px/18px 标题/柔和 danger；内容抽屉 tab 40px 紧凑 pill）。
 - 订单创建弹窗移除金额字段，payload 不再传 amount_cny。
 
+## UI 动效 / 移动端 / AstrBot 圆角 / Dashboard（本轮增量）
+
+- 路由切换 page-fade（200ms 淡入+上移 8px）；Bot tab 内容 tab-fade（水平 6px）；BotTabs 指示条 transform 滑动；高级设置使用 v-expand-transition；页面主卡片 fade-up stagger；卡片 hover 轻微阴影；`prefers-reduced-motion` 全局降级。
+- 登录页左侧光斑缓慢漂移、Logo/标题/特性列表渐显；390 隐藏左栏，表单保留 16px 内边距。
+- 内容区改为 AstrBot `page-wrapper`：无顶部留白，`border-top + border-left + 12px 左上圆角`，v-main 滚动；<960px 去掉左边框/圆角。
+- Bot 详情/对话历史/笔记页页头只保留返回与标题，状态/刷新/新建等操作移入 tab 下方工具栏；390 tab 可横向滑动且自动隐藏图标适配。
+- Bot 设置重做：基础/高级分区标题、名称+模型两列、开关右侧、sticky 保存栏、高级折叠卡；补充 per-bot 未支持说明（自动记忆/主动注入仍为全局记忆设置）。
+- 账户设置 GitHub 未启用时展示配置路径与管理员「去配置」链接；新增管理端「第三方登录」页 `/admin/settings/oauth`（Client ID/Secret 掩码/回调地址/启用/保存），GET/PUT 已接后端；404/501 友好降级。
+- Dashboard 改为 AstrBot 统计页：点数消耗趋势（7/30 天、tooltip 点数/请求/Tokens、右上总消耗）、模型用量 Top5、AI 模型柱状调用趋势、点数/请求/Tokens 总览、平台分布、Bot 用量排名；无数据显示「暂无消耗记录」空态。
+- 添加机器人步骤 1 增加可选模型配置（GET /api/models），QR session 提交带 `model_profile_id`；Bot 设置模型回显/保存沿用。
+
 ## Bot 共享 tab / inline 设置（本轮增量）
 
 - 新增 `BotTabs.vue`：概览 / 对话历史 / 记忆 / 笔记 / 设置，40px，选中 pill + 下划线；BotDetail、Conversations、Memory、Notes 顶部统一渲染，切换后 tab 始终保留。设置通过 `/bots/:id?tab=settings` 打开。
@@ -177,3 +188,7 @@ src/
 
 32. **Bot settings 契约**：后端 `PATCH /api/bots/{id}` 已支持 `settings.streaming/compression_max_turns/compression_overflow_strategy`；当前运行中的 Bot 详情响应尚未返回 settings 时，前端按默认值展示，保存后以后端返回为准。
 33. **Bot 设置**：旧 dialog 已移除；设置 tab 为 inline 内容，删除/启停危险操作仍在概览页。
+
+34. **Dashboard stats**：`GET /api/me/stats?days=30` 已接；按 Bot 筛选未提供 stats 维度参数，本轮先仅保留 7/30 天切换，Bot 用量在右侧排名展示。
+35. **Bot 设置 per-bot 记忆**：后端尚无 per-bot auto_memory / memory_inject 字段，页面只保留真实可保存的 streaming/压缩/模型/启停，并提示自动记忆/主动注入在全局「记忆 API 设置」。
+36. **第三方登录管理**：`GET/PUT /api/admin/settings/oauth` 已就绪（本次运行环境返回 github 配置）；Secret 只回显是否已配置，留空表示不修改。账户页未启用时管理员可跳转 `/admin/settings/oauth`。

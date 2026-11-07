@@ -100,6 +100,7 @@ class Container:
             mailer=self.mailer,
             clock=self.clock,
         )
+        self.settings_store = SettingsStore(self.db, self.key_manager, self.clock)
         self.oauth = OAuthService(
             self.db,
             settings=settings,
@@ -109,8 +110,8 @@ class Container:
             audit=self.audit,
             clock=self.clock,
             client=oauth_client,
+            settings_store=self.settings_store,
         )
-        self.settings_store = SettingsStore(self.db, self.key_manager, self.clock)
         self.templates = TemplateService(self.db, self.clock)
         self.models = ModelCatalogService(
             self.db, key_manager=self.key_manager, audit=self.audit, clock=self.clock

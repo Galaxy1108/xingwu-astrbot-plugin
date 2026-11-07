@@ -303,6 +303,81 @@ class MeteringService:
             ],
         }
 
+    def dashboard_stats(self, user_id: str, *, days: int = 30) -> dict[str, Any]:
+        """User dashboard aggregates: points trend + model/bot/platform rankings."""
+        from datetime import date, datetime, timedelta
+
+        days = max(1, min(90, int(days)))
+        now = self.clock.now()
+        end = date.fromtimestamp(now)
+        start = end - timedelta(days=days - 1)
+        start_ts = int(datetime(start.year, start.month, start.day).timestamp())
+        rows = self.db.query(
+            "SELECT u.bot_id, u.model_id, u.model_name, u.tokens_in, u.tokens_out, "
+            "u.points, u.created_at, b.name AS bot_name, b.platform "
+            "FROM usage_records u LEFT JOIN bots b ON b.id = u.bot_id "
+            "WHERE u.user_id = ? AND u.created_at >= ? ORDER BY u.id",
+            (user_id, start_ts),
+        )
+        buckets: dict[str, dict[str, int]] = {}
+        for offset in range(days):
+            key = (start + timedelta(days=offset)).isoformat()
+            buckets[key] = {"points": 0, "tokens": 0, "requests": 0}
+        models: dict[str, dict[str, Any]] = {}
+        bots: dict[str, dict[str, Any]] = {}
+        platforms: dict[str, dict[str, Any]] = {}
+        total_points = total_tokens = total_requests = 0
+        for row in rows:
+            key = date.fromtimestamp(int(row["created_at"])).isoformat()
+            bucket = buckets.get(key)
+            if bucket is None:
+                continue
+            points = int(row["points"] or 0)
+            tokens = int(row["tokens_in"] or 0) + int(row["tokens_out"] or 0)
+            bucket["points"] += points
+            bucket["tokens"] += tokens
+            bucket["requests"] += 1
+            total_points += points
+            total_tokens += tokens
+            total_requests += 1
+            model_key = row["model_id"] or row["model_name"] or "unknown"
+            item = models.setdefault(
+                model_key,
+                {"model_id": row["model_id"] or "", "model_name": row["model_name"] or "未命名模型",
+                 "points": 0, "tokens": 0, "requests": 0},
+            )
+            item["points"] += points
+            item["tokens"] += tokens
+            item["requests"] += 1
+            bot_key = row["bot_id"] or ""
+            bitem = bots.setdefault(
+                bot_key,
+                {"bot_id": bot_key, "bot_name": row["bot_name"] or ("未关联 Bot" if not bot_key else bot_key),
+                 "platform": row["platform"] or "", "points": 0, "tokens": 0, "requests": 0},
+            )
+            bitem["points"] += points
+            bitem["tokens"] += tokens
+            bitem["requests"] += 1
+            pitem = platforms.setdefault(
+                row["platform"] or "unknown",
+                {"platform": row["platform"] or "unknown", "points": 0, "tokens": 0, "requests": 0},
+            )
+            pitem["points"] += points
+            pitem["tokens"] += tokens
+            pitem["requests"] += 1
+        return {
+            "days": days,
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+            "total_points": total_points,
+            "total_tokens": total_tokens,
+            "total_requests": total_requests,
+            "points": [{"date": key, **buckets[key]} for key in sorted(buckets)],
+            "by_model": sorted(models.values(), key=lambda item: item["points"], reverse=True),
+            "by_bot": sorted(bots.values(), key=lambda item: item["points"], reverse=True),
+            "by_platform": sorted(platforms.values(), key=lambda item: item["points"], reverse=True),
+        }
+
     def usage_summary(self, user_id: str, *, days: int = 30) -> dict[str, Any]:
         days = max(1, min(366, int(days)))
         now = self.clock.now()

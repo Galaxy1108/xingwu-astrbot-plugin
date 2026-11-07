@@ -10,6 +10,7 @@ import type {
   AdminOrderCreateResult,
   AdminInvite,
   AdminInviteCreatePayload,
+  AdminOAuthSettings,
   AdminOverview,
   AdminUser,
   AdminUserDetail,
@@ -232,6 +233,16 @@ export function importAdminBotMemories(
 // ------------------------------------------------------------------ 记忆 API 设置
 export function getMemorySettings(): Promise<MemorySettings> {
   return api.get<MemorySettings>('/admin/settings/memory')
+}
+
+export function getAdminOAuthSettings(): Promise<AdminOAuthSettings> {
+  return api.get<AdminOAuthSettings>('/admin/settings/oauth')
+}
+
+export function updateAdminOAuthSettings(
+  payload: AdminOAuthSettings & { client_secret?: string },
+): Promise<AdminOAuthSettings> {
+  return api.put<AdminOAuthSettings>('/admin/settings/oauth', payload)
 }
 
 export function getMemorySettingsStatus(): Promise<MemorySettingsStatus> {

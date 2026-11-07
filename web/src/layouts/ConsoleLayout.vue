@@ -91,7 +91,11 @@
   <v-main class="console-main">
     <div class="content-shell">
       <div class="page-container">
-        <router-view />
+        <router-view v-slot="{ Component }">
+          <transition name="page-fade" mode="out-in">
+            <component :is="Component" />
+          </transition>
+        </router-view>
       </div>
     </div>
   </v-main>

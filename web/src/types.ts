@@ -107,6 +107,14 @@ export interface OAuthIdentity {
   created_at?: number
 }
 
+export interface AdminOAuthSettings {
+  enabled?: boolean
+  client_id?: string
+  has_client_secret?: boolean
+  redirect_uri?: string
+  callback_url?: string
+}
+
 export interface OAuthStartResult {
   authorize_url: string
   state?: string
@@ -333,6 +341,40 @@ export interface UsageDaily {
   total_tokens: number
   total_requests: number
   points: UsageDailyPoint[]
+}
+
+export interface UsageStatBucket {
+  points: number
+  tokens: number
+  requests: number
+}
+
+export interface ModelUsageStat extends UsageStatBucket {
+  model_id: string
+  model_name: string
+}
+
+export interface BotUsageStat extends UsageStatBucket {
+  bot_id: string
+  bot_name: string
+  platform: string
+}
+
+export interface PlatformUsageStat extends UsageStatBucket {
+  platform: string
+}
+
+export interface MeStats {
+  days: number
+  start: string
+  end: string
+  total_points: number
+  total_tokens: number
+  total_requests: number
+  points: UsageDailyPoint[]
+  by_model: ModelUsageStat[]
+  by_bot: BotUsageStat[]
+  by_platform: PlatformUsageStat[]
 }
 
 export interface UsageByBot {

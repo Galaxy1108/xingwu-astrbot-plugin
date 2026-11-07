@@ -937,6 +937,17 @@ function safeRedirect(): string {
 </script>
 
 <style scoped>
+@keyframes login-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .login-page {
   display: flex;
   min-height: 100dvh;
@@ -955,6 +966,29 @@ function safeRedirect(): string {
     linear-gradient(155deg, #2b7fb4 0%, #1f6b9c 45%, #123f63 100%);
   position: relative;
   overflow: hidden;
+}
+
+.login-aside::before {
+  content: '';
+  position: absolute;
+  width: 540px;
+  height: 540px;
+  left: -160px;
+  top: -180px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.28), transparent 65%);
+  filter: blur(10px);
+  animation: aside-blob-drift 18s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+@keyframes aside-blob-drift {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  100% {
+    transform: translate3d(70px, 90px, 0) scale(1.18);
+  }
 }
 
 .login-aside::after {
@@ -976,6 +1010,7 @@ function safeRedirect(): string {
 }
 
 .aside-top {
+  animation: login-rise 0.6s ease both;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1011,6 +1046,7 @@ function safeRedirect(): string {
 }
 
 .aside-title {
+  animation: login-rise 0.68s 0.08s ease both;
   font-size: 34px;
   line-height: 1.35;
   font-weight: 700;
@@ -1018,6 +1054,7 @@ function safeRedirect(): string {
 }
 
 .aside-sub {
+  animation: login-rise 0.68s 0.16s ease both;
   font-size: 14px;
   line-height: 1.7;
   opacity: 0.82;
@@ -1035,6 +1072,7 @@ function safeRedirect(): string {
 }
 
 .aside-list li {
+  animation: login-rise 0.5s ease both;
   display: flex;
   gap: 12px;
   align-items: flex-start;
@@ -1066,6 +1104,7 @@ function safeRedirect(): string {
 }
 
 .login-box {
+  animation: login-rise 0.5s 0.1s ease both;
   width: 100%;
   max-width: 400px;
 }
@@ -1252,6 +1291,16 @@ function safeRedirect(): string {
 }
 
 @media (max-width: 599px) {
+  .login-main {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .login-box {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
   .auth-tabs {
     margin-bottom: 14px;
   }

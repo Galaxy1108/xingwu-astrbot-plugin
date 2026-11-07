@@ -4,125 +4,190 @@
       <div>
         <h1 class="page-title">总览</h1>
         <p class="page-sub">
-          {{ auth.user?.email || '—' }} · {{ auth.isAdmin ? '管理员' : '普通用户' }} ·
-          {{ bots.items.length }} 个 Bot
+          {{ auth.user?.display_name || auth.user?.email || '—' }} ·
+          {{ auth.isAdmin ? '管理员' : '普通用户' }} · {{ bots.items.length }} 个 Bot
         </p>
       </div>
       <div class="page-actions">
         <v-btn variant="text" size="small" prepend-icon="mdi-refresh" :loading="loading" @click="reload">
           刷新
         </v-btn>
-        <v-btn color="primary" variant="tonal" size="small" prepend-icon="mdi-qrcode-scan" to="/connect">
-          扫码接入
+        <v-btn color="primary" variant="tonal" size="small" prepend-icon="mdi-robot-outline" to="/connect">
+          添加机器人
         </v-btn>
       </div>
     </div>
 
-    <EmptyState
-      v-if="!bots.loading && !bots.error && bots.items.length === 0"
-      icon="mdi-robot-outline"
-      title="还没有 Bot"
-      description="扫码接入一个微信或 QQ 机器人，几分钟内即可上线。"
-      :actions="[
-        { label: '扫码接入', to: '/connect' },
-        { label: '我的 Bot', to: '/bots', variant: 'tonal' },
-      ]"
-      class="mb-6"
-    />
-
     <v-row class="stats-row">
-      <v-col v-for="stat in stats" :key="stat.label" cols="6" md="3">
-        <v-card elevation="0" class="stat-card pa-4">
-          <div class="stat-label">
-            <v-icon size="18" class="mr-2">{{ stat.icon }}</v-icon>
-            <span class="text-caption muted">{{ stat.label }}</span>
-          </div>
-          <div class="stat-number">{{ stat.value }}</div>
-          <div class="stat-hint text-caption muted">{{ stat.hint }}</div>
+      <v-col cols="12" sm="4">
+        <v-card class="stat-card">
+          <div class="stat-label"><v-icon size="18">mdi-wallet-outline</v-icon> 可用额度</div>
+          <div class="stat-number">{{ formatNumber(wallet?.balance ?? 0) }}<span class="stat-unit">点</span></div>
+          <div class="stat-hint text-muted">剩余可用点数</div>
+        </v-card>
+      </v-col>
+      <v-col cols="6" sm="4">
+        <v-card class="stat-card">
+          <div class="stat-label"><v-icon size="18">mdi-robot-outline</v-icon> Bot 数量</div>
+          <div class="stat-number">{{ bots.items.length }}</div>
+          <div class="stat-hint text-muted">配额上限 {{ auth.limits?.max_bots ?? '—' }} 个</div>
+        </v-card>
+      </v-col>
+      <v-col cols="6" sm="4">
+        <v-card class="stat-card">
+          <div class="stat-label"><v-icon size="18">mdi-play-circle-outline</v-icon> 运行中</div>
+          <div class="stat-number">{{ bots.readyBots.length }}</div>
+          <div class="stat-hint text-muted">共 {{ bots.items.length }} 个 Bot</div>
         </v-card>
       </v-col>
     </v-row>
 
-    <v-row class="mt-1">
-      <v-col cols="12">
-        <v-card elevation="0" class="pa-5 h-100">
-          <div class="chart-head">
-            <div>
-              <div class="text-subtitle-1 font-weight-bold">点数消耗</div>
-              <div class="text-caption muted">按日统计 · 来自模型调用用量（非余额变化）</div>
-            </div>
-            <v-spacer />
-            <div class="chart-controls">
-              <v-select
-                v-model="botFilter"
-                :items="botOptions"
-                item-title="title"
-                item-value="value"
-                density="compact"
-                variant="outlined"
-                hide-details
-                class="bot-filter"
-                @update:model-value="loadDaily"
-              />
-              <v-btn-toggle v-model="range" density="compact" variant="text" divided mandatory>
-                <v-btn value="30" size="small" @click="loadDaily">30 天</v-btn>
-                <v-btn value="7" size="small" @click="loadDaily">7 天</v-btn>
-              </v-btn-toggle>
-            </div>
-          </div>
-          <LoadingSkeleton v-if="dailyLoading && !daily" variant="card" :rows="1" />
-          <UsageChart v-else :points="daily?.points ?? []" value-label="消耗" unit="点" :height="210" />
-          <div class="chart-foot text-caption muted">
-            <span>近 {{ daily?.days ?? 30 }} 天消耗 <strong>{{ formatNumber(daily?.total_points ?? 0) }}</strong> 点</span>
-            <span>请求 {{ formatNumber(daily?.total_requests ?? 0) }} 次</span>
-            <span>剩余 {{ formatNumber(wallet?.balance ?? 0) }} 点</span>
-          </div>
-        </v-card>
-      </v-col>
-
-    </v-row>
-
-    <v-card elevation="0" class="mt-4">
-      <div class="section-head">
-        <div class="text-subtitle-1 font-weight-bold">最近流水</div>
-        <v-spacer />
-        <v-btn variant="text" size="small" to="/billing" append-icon="mdi-arrow-right">查看全部</v-btn>
-      </div>
-      <v-table density="comfortable" class="recent-table">
-        <thead>
-          <tr>
-            <th>时间</th>
-            <th>类型</th>
-            <th>说明</th>
-            <th class="text-right">变动</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="entry in recentLedger" :key="String(entry.id)">
-            <td class="text-caption muted nowrap">{{ formatDateTime(entry.created_at) }}</td>
-            <td>
-              <v-chip size="x-small" variant="tonal" :color="entry.delta && entry.delta > 0 ? 'success' : 'default'">
-                {{ ledgerTypeLabel(entry.type) }}
-              </v-chip>
-            </td>
-            <td class="entry-note">{{ entry.note || '—' }}</td>
-            <td class="text-right font-weight-medium" :class="entry.delta && entry.delta > 0 ? 'text-success' : ''">
-              {{ signedNumber(entry.delta) }}
-            </td>
-          </tr>
-          <tr v-if="!recentLedger.length">
-            <td colspan="4" class="text-center muted pa-6">暂无流水</td>
-          </tr>
-        </tbody>
-      </v-table>
-    </v-card>
-
-    <v-alert v-if="bots.error" type="error" variant="tonal" class="mt-4">
+    <v-alert v-if="error" type="error" variant="tonal" class="mb-4">
       <div class="alert-row">
-        <span>{{ bots.error.message }}</span>
+        <span>{{ error }}</span>
         <v-btn size="small" variant="text" color="error" @click="reload">重试</v-btn>
       </div>
     </v-alert>
+
+    <LoadingSkeleton v-if="loading && !stats" variant="card" :rows="4" />
+
+    <v-card v-else-if="isEmpty" class="empty-card">
+      <EmptyState
+        icon="mdi-chart-line"
+        title="暂无消耗记录"
+        description="产生模型调用后，这里会展示点数消耗趋势、模型排名与平台分布。"
+      />
+    </v-card>
+
+    <template v-else>
+      <v-row class="main-row">
+        <v-col cols="12" lg="8">
+          <v-card class="chart-card">
+            <div class="card-head">
+              <div>
+                <h2 class="card-title">点数消耗趋势</h2>
+                <p class="card-sub text-muted">按日统计模型调用消耗；Tokens 为次要指标</p>
+              </div>
+              <div class="head-actions">
+                <v-btn-toggle v-model="range" density="compact" variant="text" divided mandatory class="range-toggle">
+                  <v-btn value="7" size="small" @click="load">7 天</v-btn>
+                  <v-btn value="30" size="small" @click="load">30 天</v-btn>
+                </v-btn-toggle>
+                <div class="total-points">
+                  <span class="text-muted">总消耗</span>
+                  <strong>{{ formatNumber(stats?.total_points) }}</strong> 点
+                </div>
+              </div>
+            </div>
+            <transition name="page-fade" mode="out-in">
+              <div :key="range" class="chart-body">
+                <UsageChart :points="stats?.points ?? []" value-label="消耗" unit="点" :height="230" />
+              </div>
+            </transition>
+          </v-card>
+        </v-col>
+
+        <v-col cols="12" lg="4">
+          <v-card class="rank-card">
+            <div class="card-head">
+              <div>
+                <h2 class="card-title">模型用量排名</h2>
+                <p class="card-sub text-muted">按点数 Top 5</p>
+              </div>
+              <v-icon color="primary">mdi-trophy-outline</v-icon>
+            </div>
+            <div v-if="topModels.length" class="rank-list">
+              <div v-for="(item, index) in topModels" :key="item.model_id" class="rank-row">
+                <span class="rank-index">{{ index + 1 }}</span>
+                <div class="rank-main">
+                  <div class="rank-name">{{ item.model_name || item.model_id || '未知模型' }}</div>
+                  <div class="rank-sub text-muted">{{ formatNumber(item.tokens) }} Tokens</div>
+                </div>
+                <strong class="rank-points">{{ formatNumber(item.points) }} 点</strong>
+              </div>
+            </div>
+            <p v-else class="empty-hint text-muted">暂无模型用量</p>
+          </v-card>
+        </v-col>
+      </v-row>
+
+      <div class="section-title">AI 模型</div>
+
+      <v-row>
+        <v-col cols="12" lg="8">
+          <v-card class="chart-card">
+            <div class="card-head">
+              <div>
+                <h2 class="card-title">调用趋势</h2>
+                <p class="card-sub text-muted">按日点数 · 柱状图</p>
+              </div>
+              <span class="text-muted small-note">近 {{ stats?.days }} 天</span>
+            </div>
+            <div class="bar-chart" role="img" :aria-label="`近 ${stats?.days} 天每日点数柱状图`">
+              <div class="bar-grid">
+                <span v-for="line in 4" :key="line" class="bar-grid-line" />
+              </div>
+              <div class="bar-columns">
+                <div
+                  v-for="point in stats?.points ?? []"
+                  :key="point.date"
+                  class="bar-column"
+                  :title="`${point.date} · ${formatNumber(point.points)} 点 · ${formatNumber(point.requests)} 次请求 · ${formatNumber(point.tokens)} Tokens`"
+                >
+                  <div class="bar-fill" :style="{ height: `${barHeight(point.points)}%` }" />
+                </div>
+              </div>
+              <div class="bar-labels">
+                <span>{{ stats?.start?.slice(5) }}</span>
+                <span>{{ stats?.end?.slice(5) }}</span>
+              </div>
+            </div>
+          </v-card>
+        </v-col>
+
+        <v-col cols="12" lg="4">
+          <v-card class="usage-card">
+            <div class="card-head">
+              <div>
+                <h2 class="card-title">最近 {{ stats?.days }} 天用量</h2>
+                <p class="card-sub text-muted">点数为主指标</p>
+              </div>
+            </div>
+            <div class="usage-numbers">
+              <div class="usage-big">
+                <strong>{{ formatNumber(stats?.total_points) }}</strong>
+                <span>点</span>
+              </div>
+              <div class="usage-meta">
+                <span>请求 <strong>{{ formatNumber(stats?.total_requests) }}</strong> 次</span>
+                <span>Tokens <strong>{{ formatNumber(stats?.total_tokens) }}</strong></span>
+              </div>
+            </div>
+            <v-divider class="my-4" />
+            <div class="mini-section">
+              <div class="mini-title text-muted">平台分布</div>
+              <div v-if="platformRows.length" class="mini-list">
+                <div v-for="item in platformRows" :key="item.platform" class="mini-row">
+                  <span>{{ platformText(item.platform) }}</span>
+                  <strong>{{ formatNumber(item.points) }} 点</strong>
+                </div>
+              </div>
+              <p v-else class="empty-hint text-muted">暂无平台用量</p>
+            </div>
+            <div class="mini-section">
+              <div class="mini-title text-muted">Bot 用量排名</div>
+              <div v-if="topBots.length" class="mini-list">
+                <div v-for="(item, index) in topBots" :key="item.bot_id" class="mini-row">
+                  <span class="bot-rank-name">{{ index + 1 }}. {{ item.bot_name || item.bot_id }}</span>
+                  <strong>{{ formatNumber(item.points) }} 点</strong>
+                </div>
+              </div>
+              <p v-else class="empty-hint text-muted">暂无 Bot 用量</p>
+            </div>
+          </v-card>
+        </v-col>
+      </v-row>
+    </template>
   </div>
 </template>
 
@@ -133,64 +198,59 @@ import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
 import UsageChart from '@/components/UsageChart.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useBotsStore } from '@/stores/bots'
-import { getDailyUsage, getUsageByBot, getWallet, getWalletLedger } from '@/api/wallet'
-import type { LedgerEntry, UsageByBot, UsageDaily, Wallet } from '@/types'
-import { formatDateTime, formatNumber } from '@/utils/format'
+import { getMeStats, getWallet } from '@/api/wallet'
+import type { MeStats, Wallet } from '@/types'
+import { formatNumber, platformLabel } from '@/utils/format'
+import { errorMessage } from '@/utils/errors'
 
 const auth = useAuthStore()
 const bots = useBotsStore()
 
 const wallet = ref<Wallet | null>(null)
-const daily = ref<UsageDaily | null>(null)
-const byBot = ref<UsageByBot[]>([])
-const recentLedger = ref<LedgerEntry[]>([])
-const dailyLoading = ref(false)
+const stats = ref<MeStats | null>(null)
 const loading = ref(false)
+const error = ref('')
 const range = ref<'30' | '7'>('30')
-const botFilter = ref('')
 
-const botOptions = computed(() => [
-  { title: '全部 Bot', value: '' },
-  ...byBot.value
-    .filter((item) => Boolean(item.bot_id))
-    .map((item) => ({ title: item.bot_name || item.bot_id, value: item.bot_id })),
-])
-
-const stats = computed(() => [
-  {
-    label: '可用额度',
-    value: `${formatNumber(wallet.value?.balance ?? 0)} 点`,
-    hint: '剩余可用点数',
-    icon: 'mdi-wallet-outline',
-  },
-  {
-    label: '近 30 天消耗',
-    value: `${formatNumber(daily.value?.total_points ?? 0)} 点`,
-    hint: `请求 ${formatNumber(daily.value?.total_requests ?? 0)} 次`,
-    icon: 'mdi-chart-line',
-  },
-  {
-    label: 'Bot 数量',
-    value: String(bots.items.length),
-    hint: `配额上限 ${auth.limits?.max_bots ?? '—'} 个`,
-    icon: 'mdi-robot-outline',
-  },
-  {
-    label: '运行中',
-    value: String(bots.readyBots.length),
-    hint: `共 ${bots.items.length} 个 Bot`,
-    icon: 'mdi-play-circle-outline',
-  },
-])
-
-onMounted(() => {
-  void reload()
+const isEmpty = computed(() => {
+  if (!stats.value) return true
+  return Number(stats.value.total_requests || 0) === 0 && Number(stats.value.total_points || 0) === 0
 })
+
+const topModels = computed(() =>
+  [...(stats.value?.by_model ?? [])].sort((a, b) => b.points - a.points).slice(0, 5),
+)
+const platformRows = computed(() =>
+  [...(stats.value?.by_platform ?? [])].filter((item) => item.platform).sort((a, b) => b.points - a.points),
+)
+const topBots = computed(() =>
+  [...(stats.value?.by_bot ?? [])]
+    .filter((item) => item.bot_id)
+    .sort((a, b) => b.points - a.points)
+    .slice(0, 5),
+)
+const barMax = computed(() =>
+  Math.max(1, ...(stats.value?.points ?? []).map((point) => Number(point.points || 0))),
+)
+
+function barHeight(value: number): number {
+  const points = Number(value || 0)
+  if (points <= 0) return 0
+  return Math.max(2, (points / barMax.value) * 100)
+}
+
+function platformText(platform: string): string {
+  if (!platform || platform === 'unknown') return '未知平台'
+  return platformLabel(platform)
+}
+
+onMounted(reload)
 
 async function reload(): Promise<void> {
   loading.value = true
+  error.value = ''
   try {
-    await Promise.all([bots.fetchBots(), loadWallet(), loadDaily(), loadByBot(), loadLedger()])
+    await Promise.all([bots.fetchBots(), loadWallet(), loadStats()])
   } finally {
     loading.value = false
   }
@@ -200,54 +260,21 @@ async function loadWallet(): Promise<void> {
   try {
     wallet.value = await getWallet()
   } catch {
-    /* 由页面空白提示兜底 */
+    wallet.value = null
   }
 }
 
-async function loadDaily(): Promise<void> {
-  dailyLoading.value = true
+async function load(): Promise<void> {
+  await loadStats()
+}
+
+async function loadStats(): Promise<void> {
   try {
-    daily.value = await getDailyUsage(Number(range.value), botFilter.value || undefined)
-  } catch {
-    daily.value = null
-  } finally {
-    dailyLoading.value = false
+    stats.value = await getMeStats(Number(range.value))
+  } catch (err) {
+    error.value = errorMessage(err, '加载用量统计失败')
+    stats.value = null
   }
-}
-
-async function loadByBot(): Promise<void> {
-  try {
-    byBot.value = (await getUsageByBot(30)).items ?? []
-  } catch {
-    byBot.value = []
-  }
-}
-
-async function loadLedger(): Promise<void> {
-  try {
-    const result = await getWalletLedger(1, 5)
-    recentLedger.value = result.items ?? []
-  } catch {
-    recentLedger.value = []
-  }
-}
-
-function ledgerTypeLabel(type?: string): string {
-  switch (type) {
-    case 'grant':
-      return '充值'
-    case 'adjust':
-      return '调整'
-    case 'consume':
-      return '消耗'
-    default:
-      return type || '变动'
-  }
-}
-
-function signedNumber(value?: number): string {
-  const delta = Number(value ?? 0)
-  return delta > 0 ? `+${formatNumber(delta)}` : formatNumber(delta)
 }
 </script>
 
@@ -259,21 +286,29 @@ function signedNumber(value?: number): string {
 .page-head {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  justify-content: space-between;
+  gap: 16px;
   flex-wrap: wrap;
-  margin-bottom: 24px;
+  margin-bottom: 18px;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
 }
 
 .page-sub {
-  margin: 0;
-  font-size: 13px;
+  margin: 4px 0 0;
   color: var(--console-text-muted);
+  font-size: 12.5px;
 }
 
 .page-actions {
   display: flex;
-  gap: 8px;
-  margin-left: auto;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .stats-row {
@@ -281,75 +316,325 @@ function signedNumber(value?: number): string {
 }
 
 .stat-card {
-  border: 1px solid var(--console-border);
-  transition: border-color 0.15s ease;
-}
-
-.stat-card:hover {
-  border-color: rgba(60, 150, 202, 0.45);
+  padding: 14px 16px;
+  height: 100%;
 }
 
 .stat-label {
   display: flex;
   align-items: center;
-  margin-bottom: 8px;
+  gap: 6px;
   color: var(--console-text-muted);
+  font-size: 12px;
 }
 
 .stat-number {
+  margin-top: 8px;
   font-size: 26px;
   font-weight: 700;
-  line-height: 1.25;
+  line-height: 1.15;
 }
 
-.stat-hint {
-  margin-top: 2px;
-}
-
-.chart-head {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 4px;
-}
-
-.chart-controls {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.bot-filter {
-  width: 150px;
-}
-
-.chart-foot {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin-top: 6px;
-}
-
-.section-head {
-  display: flex;
-  align-items: center;
-  padding: 18px 20px 4px;
-}
-
-.recent-table {
-  background: transparent;
-}
-
-.recent-table :deep(th) {
-  font-size: 12px;
-  font-weight: 600;
+.stat-unit {
+  margin-left: 3px;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--console-text-muted);
 }
 
-.entry-note {
-  max-width: 420px;
+.stat-hint {
+  margin-top: 3px;
+  font-size: 11.5px;
+}
+
+.main-row {
+  margin-top: 4px;
+}
+
+.chart-card,
+.rank-card,
+.usage-card {
+  padding: 18px;
+  height: 100%;
+}
+
+.card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.card-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.card-sub {
+  margin: 3px 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.range-toggle {
+  border: 1px solid var(--console-border);
+  border-radius: 8px;
+}
+
+.total-points {
+  font-size: 12px;
+  color: var(--console-text-muted);
+}
+
+.total-points strong {
+  margin-left: 4px;
+  font-size: 20px;
+  color: var(--console-text);
+}
+
+.chart-body {
+  min-height: 230px;
+}
+
+.rank-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.rank-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--console-border);
+}
+
+.rank-row:last-child {
+  border-bottom: none;
+}
+
+.rank-index {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  background: var(--console-primary-soft);
+  color: var(--console-primary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.rank-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.rank-name {
+  font-size: 13px;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.rank-sub {
+  margin-top: 2px;
+  font-size: 11px;
+}
+
+.rank-points {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.section-title {
+  margin: 22px 0 10px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.bar-chart {
+  position: relative;
+  height: 190px;
+  padding-top: 10px;
+}
+
+.bar-grid {
+  position: absolute;
+  inset: 10px 0 22px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.bar-grid-line {
+  height: 1px;
+  background: var(--console-border);
+  opacity: 0.65;
+}
+
+.bar-columns {
+  position: absolute;
+  inset: 10px 0 22px;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.bar-column {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  min-width: 2px;
+}
+
+.bar-fill {
+  width: 100%;
+  border-radius: 3px 3px 0 0;
+  background: linear-gradient(180deg, var(--console-primary), rgba(60, 150, 202, 0.55));
+  transition: height 0.3s ease;
+}
+
+.bar-column:hover .bar-fill {
+  filter: brightness(1.08);
+}
+
+.bar-labels {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: space-between;
+  color: var(--console-text-muted);
+  font-size: 10px;
+}
+
+.usage-numbers {
+  margin-top: 8px;
+}
+
+.usage-big {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.usage-big strong {
+  font-size: 40px;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.usage-big span {
+  font-size: 13px;
+  color: var(--console-text-muted);
+}
+
+.usage-meta {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  color: var(--console-text-muted);
+  font-size: 12px;
+}
+
+.usage-meta strong {
+  color: var(--console-text);
+}
+
+.mini-section {
+  margin-top: 12px;
+}
+
+.mini-title {
+  font-size: 11.5px;
+  margin-bottom: 6px;
+}
+
+.mini-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mini-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.mini-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mini-row strong {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.bot-rank-name {
+  color: var(--console-text);
+}
+
+.empty-card {
+  padding: 26px;
+}
+
+.empty-hint {
+  margin: 10px 0;
+  font-size: 12px;
+}
+
+.small-note {
+  font-size: 11.5px;
+}
+
+.alert-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 599px) {
+  .page-title {
+    font-size: 22px;
+  }
+
+  .stat-number {
+    font-size: 22px;
+  }
+
+  .chart-card,
+  .rank-card,
+  .usage-card {
+    padding: 14px;
+  }
+
+  .total-points strong {
+    font-size: 18px;
+  }
 }
 </style>

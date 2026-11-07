@@ -7,6 +7,7 @@ from typing import Any
 from aiohttp import web
 
 from ..appeals import appeals_of
+from ..auth.oauth import OAUTH_PROVIDERS, OAUTH_SECRET_MASK, OAUTH_SETTINGS_KEY
 from ..bans import bans_of
 from ..errors import AppError, Forbidden, ValidationError
 from .app import client_ip, container_of, current_user, ok
@@ -1031,3 +1032,133 @@ async def admin_reject_appeal(request: web.Request) -> web.Response:
         ip=client_ip(request),
     )
     return ok({"appeal": appeal})
+
+
+# ------------------------------------------------ OAuth provider settings
+def _oauth_callback_url(request: web.Request, config: dict[str, str]) -> str:
+    if config.get("redirect_uri"):
+        return str(config["redirect_uri"])
+    return f"{request.url.origin()}/api/auth/oauth/github/callback"
+
+
+def _masked_github(container, request: web.Request) -> dict[str, Any]:
+    config = container.oauth.github_config()
+    has_secret = bool(config["client_secret"])
+    return {
+        "client_id": config["client_id"],
+        "client_secret": OAUTH_SECRET_MASK if has_secret else "",
+        "redirect_uri": config["redirect_uri"],
+        "has_secret": has_secret,
+        # The current console reads ``has_client_secret``; keep both names so
+        # older/newer clients can mask the field without an extra round-trip.
+        "has_client_secret": has_secret,
+        "enabled": container.oauth.github_enabled(),
+        "callback_url": _oauth_callback_url(request, config),
+    }
+
+
+@routes.get("/api/admin/settings/oauth")
+async def admin_get_oauth_settings(request: web.Request) -> web.Response:
+    require_admin(request)
+    container = container_of(request)
+    return ok({"github": _masked_github(container, request)})
+
+
+@routes.put("/api/admin/settings/oauth")
+async def admin_update_oauth_settings(request: web.Request) -> web.Response:
+    admin = require_admin(request)
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise ValidationError("请求体必须是对象")
+    github = body.get("github")
+    if not isinstance(github, dict):
+        # The console sends a flat payload (``{client_id, client_secret,
+        # redirect_uri, enabled}``); accept both shapes for compatibility.
+        if any(
+            key in body
+            for key in ("client_id", "client_secret", "redirect_uri", "enabled")
+        ):
+            github = body
+        else:
+            raise ValidationError("github 配置不能为空", field="github")
+    container = container_of(request)
+    store = getattr(container, "settings_store", None)
+    if store is None:
+        raise AppError(
+            "平台设置存储不可用", code="not_implemented", status=501
+        )
+    stored = store.get(OAUTH_SETTINGS_KEY)
+    merged = dict(stored) if isinstance(stored, dict) else {}
+    # Deep merge: only the keys present in the request change; the rest of the
+    # stored configuration (including unknown future keys) is preserved.
+    for key in ("client_id", "redirect_uri"):
+        if key not in github:
+            continue
+        value = str(github.get(key) or "").strip()
+        if value:
+            merged[key] = value
+        else:
+            merged.pop(key, None)
+    if "enabled" in github:
+        merged["enabled"] = bool(github.get("enabled"))
+    if "client_secret" in github:
+        value = str(github.get("client_secret") or "").strip()
+        if value == OAUTH_SECRET_MASK:
+            pass  # masked placeholder: keep the stored secret untouched
+        elif value:
+            merged["client_secret"] = value
+        else:
+            merged.pop("client_secret", None)
+    if merged:
+        store.set(OAUTH_SETTINGS_KEY, merged, actor_id=admin["id"])
+    else:
+        store.delete(OAUTH_SETTINGS_KEY)
+    config = container.oauth.github_config()
+    container.audit.log(
+        actor_id=admin["id"],
+        actor_role="admin",
+        action="oauth.settings_updated",
+        target_type="platform",
+        target_id=OAUTH_SETTINGS_KEY,
+        ip=client_ip(request),
+        # Never write the secret (or a reversible hint) into the audit log.
+        detail={
+            "provider": "github",
+            "client_id": config["client_id"],
+            "redirect_uri": config["redirect_uri"],
+            "has_secret": bool(config["client_secret"]),
+        },
+    )
+    return ok({"github": _masked_github(container, request)})
+
+
+@routes.post("/api/admin/settings/oauth/test")
+async def admin_test_oauth_settings(request: web.Request) -> web.Response:
+    require_admin(request)
+    body = await _optional_body(request)
+    provider = str(body.get("provider") or "github").strip().lower()
+    if provider not in OAUTH_PROVIDERS:
+        raise ValidationError("不支持的第三方登录方式", field="provider")
+    container = container_of(request)
+    config = container.oauth.github_config()
+    callback_url = _oauth_callback_url(request, config)
+    missing: list[str] = []
+    if not config["client_id"]:
+        missing.append("client_id")
+    if not config["client_secret"]:
+        missing.append("client_secret")
+    if not callback_url:
+        missing.append("redirect_uri")
+    if missing:
+        raise ValidationError(
+            "GitHub OAuth 配置不完整：" + "、".join(missing),
+            field=missing[0],
+            extra={"missing": missing},
+        )
+    return ok(
+        {
+            "provider": provider,
+            "enabled": container.oauth.github_enabled(),
+            "callback_url": callback_url,
+        }
+    )

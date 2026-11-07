@@ -101,6 +101,19 @@
       <p class="template-copy-note text-muted">
         创建时会复制所选模板的配置，之后可在 Bot 设置中调整，不影响模板本身。
       </p>
+      <v-select
+        v-model="modelId"
+        :items="modelOptions"
+        item-title="title"
+        item-value="value"
+        label="模型配置（可选）"
+        :loading="modelsLoading"
+        clearable
+        no-data-text="暂无可用模型配置"
+        hint="不同模型点数单价不同，之后可在 Bot 设置修改"
+        persistent-hint
+        class="mt-4"
+      />
 
       <v-btn
         color="primary"
@@ -218,6 +231,7 @@ import QrPanel from '@/components/QrPanel.vue'
 import { usePolling } from '@/composables/usePolling'
 import { useUiStore } from '@/stores/ui'
 import { listTemplates } from '@/api/wallet'
+import { listModels } from '@/api/models'
 import {
   cancelQrSession,
   createQrSession,
@@ -225,7 +239,7 @@ import {
   pollQrSession,
 } from '@/api/qr'
 import { toApiError } from '@/api/client'
-import type { Bot, Platform, QrConnectSession, QrStatus, Template } from '@/types'
+import type { Bot, ModelProfile, Platform, QrConnectSession, QrStatus, Template } from '@/types'
 import { errorMessage } from '@/utils/errors'
 import { platformShortLabel } from '@/utils/format'
 
@@ -244,6 +258,9 @@ const creating = ref(false)
 const templates = ref<Template[]>([])
 const templatesLoading = ref(false)
 const templatesError = ref('')
+const models = ref<ModelProfile[]>([])
+const modelsLoading = ref(false)
+const modelId = ref('')
 
 const session = ref<QrConnectSession | null>(null)
 const finishedBot = ref<Bot | null>(null)
@@ -259,6 +276,12 @@ const qrPanelStatus = computed<QrStatus>(() => {
 })
 const selectedTemplate = computed(() => templates.value.find((item) => item.id === templateId.value))
 const selectedTemplateName = computed(() => selectedTemplate.value?.name || '—')
+const modelOptions = computed(() =>
+  models.value.map((model) => ({
+    title: `${model.name} · ${model.model || model.provider}`,
+    value: model.id,
+  })),
+)
 
 const platformOptions: Array<{
   value: Platform
@@ -303,6 +326,7 @@ const { start: startPolling, stop: stopPolling } = usePolling(
 
 onMounted(() => {
   void loadTemplates()
+  void loadModels()
 })
 
 onBeforeUnmount(() => {
@@ -323,6 +347,18 @@ async function loadTemplates(): Promise<void> {
     templatesError.value = errorMessage(error, '加载模板失败')
   } finally {
     templatesLoading.value = false
+  }
+}
+
+async function loadModels(): Promise<void> {
+  modelsLoading.value = true
+  try {
+    const result = await listModels()
+    models.value = result.items ?? []
+  } catch {
+    models.value = []
+  } finally {
+    modelsLoading.value = false
   }
 }
 
@@ -349,6 +385,7 @@ async function onCreate(): Promise<void> {
       platform: platform.value,
       name: botName,
       template_id: templateId.value,
+      model_profile_id: modelId.value || undefined,
     })
     session.value = result.session
     step.value = 'qr'

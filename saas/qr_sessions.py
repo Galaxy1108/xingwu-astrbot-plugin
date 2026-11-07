@@ -161,6 +161,7 @@ class QrSessionService:
         platform: str,
         name: str,
         template_id: str,
+        model_profile_id: str = "",
         ip: str = "",
     ) -> dict[str, Any]:
         name = (name or "").strip()
@@ -188,6 +189,14 @@ class QrSessionService:
                 code="quota_exceeded",
                 status=409,
             )
+        model_profile_id = str(model_profile_id or "").strip()
+        if model_profile_id:
+            profile = self.db.query_one(
+                "SELECT id FROM model_profiles WHERE id = ? AND enabled = 1",
+                (model_profile_id,),
+            )
+            if profile is None:
+                raise ValidationError("模型配置不存在或已停用", field="model_profile_id")
 
         session_id = self._new_id()
         temp_platform_id = f"qrs_{session_id}"
@@ -217,14 +226,15 @@ class QrSessionService:
             )
             self.db.execute(
                 "INSERT INTO qr_sessions(id, user_id, platform, name, template_id, "
-                "temp_platform_id, status, created_at, expires_at) "
-                "VALUES (?,?,?,?,?,?,'pending',?,?)",
+                "model_profile_id, temp_platform_id, status, created_at, expires_at) "
+                "VALUES (?,?,?,?,?,?,?,'pending',?,?)",
                 (
                     session_id,
                     user_id,
                     platform,
                     name,
                     template_id,
+                    model_profile_id,
                     temp_platform_id,
                     now,
                     now + ttl,
@@ -250,7 +260,8 @@ class QrSessionService:
             target_type="qr_session",
             target_id=session_id,
             ip=ip,
-            detail={"platform": platform, "name": name, "template_id": template_id},
+            detail={"platform": platform, "name": name, "template_id": template_id,
+                    "model_profile_id": model_profile_id},
         )
         row = self._row(session_id) or {}
         return self._challenge_payload(row, self._live.get(session_id))
@@ -372,6 +383,15 @@ class QrSessionService:
             ip=ip,
         )
         bot_id = bot["id"]
+        if row.get("model_profile_id"):
+            import json as _json
+
+            snapshot = dict(bot.get("snapshot") or {})
+            snapshot["model_profile_id"] = row["model_profile_id"]
+            self.db.execute(
+                "UPDATE bots SET snapshot = ? WHERE id = ?",
+                (_json.dumps(snapshot, ensure_ascii=False), bot_id),
+            )
         try:
             # 2) Move the provider-specific state from the temporary platform.
             finalize_temp = getattr(self.port, "finalize_temp_platform", None)

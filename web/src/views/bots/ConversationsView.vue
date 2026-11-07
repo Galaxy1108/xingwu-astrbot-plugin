@@ -5,12 +5,18 @@
       description="查看该 Bot 的对话历史；分享链接为只读，可随时撤销。"
       :back-to="`/bots/${botId}`"
     >
-      <template #actions>
-        <v-btn variant="text" prepend-icon="mdi-refresh" :loading="loading" @click="load">刷新</v-btn>
-      </template>
+
     </PageHeader>
 
     <BotTabs :bot-id="botId" active="conversations" />
+
+    <div class="content-toolbar">
+      <span class="text-muted toolbar-hint">只读对话历史与分享链接</span>
+      <v-spacer />
+      <v-btn size="small" variant="text" prepend-icon="mdi-refresh" :loading="loading" @click="load">
+        刷新
+      </v-btn>
+    </div>
 
     <v-alert v-if="error" type="error" variant="tonal" class="mb-4">
       <div class="alert-row">
@@ -388,6 +394,10 @@ async function copyShare(): Promise<void> {
 </script>
 
 <style scoped>
+.toolbar-hint {
+  font-size: 12px;
+}
+
 .table-card {
   padding: 4px 0;
 }

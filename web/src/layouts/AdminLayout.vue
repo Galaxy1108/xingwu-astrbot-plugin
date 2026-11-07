@@ -100,7 +100,11 @@
   <v-main class="admin-main">
     <div class="content-shell">
       <div class="page-container">
-        <router-view />
+        <router-view v-slot="{ Component }">
+          <transition name="page-fade" mode="out-in">
+            <component :is="Component" />
+          </transition>
+        </router-view>
       </div>
     </div>
   </v-main>
@@ -145,6 +149,7 @@ const navGroups = [
     items: [
       { to: '/admin/models', title: '模型与定价', icon: 'mdi-robot-happy-outline' },
       { to: '/admin/settings', title: '记忆 API 设置', icon: 'mdi-tune-variant' },
+      { to: '/admin/settings/oauth', title: '第三方登录', icon: 'mdi-github' },
       { to: '/admin/appeals', title: '申诉处理', icon: 'mdi-gavel' },
       { to: '/admin/audit', title: '审计日志', icon: 'mdi-clipboard-text-clock-outline' },
     ],

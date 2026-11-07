@@ -135,6 +135,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '模型与定价', role: 'admin' },
       },
       {
+        path: 'settings/oauth',
+        name: 'admin-oauth-settings',
+        component: () => import('@/views/admin/OAuthSettingsView.vue'),
+        meta: { title: '第三方登录' },
+      },
+      {
         path: 'settings',
         name: 'admin-settings',
         component: () => import('@/views/admin/SettingsView.vue'),

@@ -1,5 +1,6 @@
 import { api } from './client'
-import type { LedgerEntry, PageResult, RedeemResult, Template, UsageByBot, UsageDaily, Wallet, WalletUsage } from '@/types'
+import type {
+  MeStats, LedgerEntry, PageResult, RedeemResult, Template, UsageByBot, UsageDaily, Wallet, WalletUsage } from '@/types'
 
 export function listTemplates(): Promise<{ items: Template[] }> {
   return api.get<{ items: Template[] }>('/templates')
@@ -19,6 +20,10 @@ export function getWalletUsage(days = 14): Promise<WalletUsage> {
 }
 
 /** 每日点数消耗（来自 usage_records，图表用）。 */
+export function getMeStats(days = 30): Promise<MeStats> {
+  return api.get<MeStats>('/me/stats', { days })
+}
+
 export function getDailyUsage(days = 30, botId?: string): Promise<UsageDaily> {
   return api.get<UsageDaily>('/me/usage/daily', { days, bot_id: botId || undefined })
 }

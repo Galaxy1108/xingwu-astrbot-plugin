@@ -142,21 +142,112 @@ a:hover {
 }
 
 .content-shell {
-  margin: 8px 0 0 8px;
+  margin: 0;
   border-top-left-radius: 12px;
-  border: 1px solid var(--console-border);
-  border-right: 0;
-  border-bottom: 0;
+  border-top: 1px solid var(--console-border);
+  border-left: 1px solid var(--console-border);
   background: var(--console-bg);
-  min-height: calc(100vh - 64px);
+  min-height: calc(100vh - 56px);
   box-sizing: border-box;
+}
+
+.v-main {
+  overflow-y: auto;
 }
 
 @media (max-width: 959px) {
   .content-shell {
-    margin-left: 0;
     border-left: 0;
     border-top-left-radius: 0;
+  }
+}
+
+/* 路由与页面进入动效 */
+.page-fade-enter-active,
+.page-fade-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.page-fade-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.page-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+.tab-fade-enter-active,
+.tab-fade-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.tab-fade-enter-from {
+  opacity: 0;
+  transform: translateX(6px);
+}
+
+.tab-fade-leave-to {
+  opacity: 0;
+  transform: translateX(-6px);
+}
+
+@keyframes card-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-container > * {
+  animation: card-fade-up 0.36s ease both;
+}
+
+.page-container > *:nth-child(2) {
+  animation-delay: 35ms;
+}
+
+.page-container > *:nth-child(3) {
+  animation-delay: 70ms;
+}
+
+.page-container > *:nth-child(4) {
+  animation-delay: 105ms;
+}
+
+.page-container .v-card {
+  transition: box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.page-container .v-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+.content-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: -6px 0 16px;
+}
+
+.content-toolbar .v-spacer {
+  flex: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
