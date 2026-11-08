@@ -36,7 +36,12 @@
           <h2 class="login-title">登录控制台</h2>
           <p class="login-sub">选择验证码或密码登录；Alpha 内测阶段仅限受邀用户。</p>
 
-          <div class="auth-tabs" role="tablist" aria-label="登录方式">
+          <div
+            class="auth-tabs"
+            :class="`auth-tabs--${loginMethod}`"
+            role="tablist"
+            aria-label="登录方式"
+          >
             <button
               type="button"
               class="auth-tab"
@@ -1225,6 +1230,7 @@ function safeRedirect(): string {
 
 
 .auth-tabs {
+  position: relative;
   display: flex;
   gap: 4px;
   padding: 4px;
@@ -1233,7 +1239,27 @@ function safeRedirect(): string {
   background: var(--console-surface-variant);
 }
 
+.auth-tabs::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: calc(50% - 6px);
+  height: 40px;
+  border-radius: 8px;
+  background: var(--console-surface);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+.auth-tabs--password::before {
+  transform: translateX(calc(100% + 4px));
+}
+
 .auth-tab {
+  position: relative;
+  z-index: 1;
   flex: 1;
   height: 40px;
   border: none;
@@ -1246,10 +1272,13 @@ function safeRedirect(): string {
   cursor: pointer;
 }
 
+.auth-tab {
+  transition: color 160ms ease;
+}
+
 .auth-tab--active {
-  background: var(--console-surface);
+  background: transparent;
   color: var(--console-primary);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
 
 .code-hint {

@@ -1,5 +1,6 @@
 <template>
   <v-navigation-drawer
+    v-if="open"
     v-model="open"
     location="right"
     temporary
