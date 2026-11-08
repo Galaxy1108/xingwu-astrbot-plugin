@@ -150,11 +150,24 @@ class SaaSBotPlugin(Star):
         """Record real token usage reported by the provider (never blocks replies)."""
         if self.container is None:
             return
-        usage = getattr(response, "usage", None)
-        if usage is None:
-            return
         bot_id = self._bot_id_for_event(event)
         if bot_id is None:
+            return
+        # Count incoming/answered messages for the dashboard trend.
+        try:
+            row = self.container.db.query_one(
+                "SELECT user_id, platform FROM bots WHERE id = ?", (bot_id,)
+            )
+            if row is not None:
+                self.container.message_stats.increment(
+                    user_id=row["user_id"],
+                    bot_id=bot_id,
+                    platform=row["platform"] or "",
+                )
+        except Exception:  # noqa: BLE001
+            logger.debug("SaaS 消息统计失败", exc_info=True)
+        usage = getattr(response, "usage", None)
+        if usage is None:
             return
         model_name = ""
         try:

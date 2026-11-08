@@ -9,6 +9,7 @@ shell) without a container change.
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from aiohttp import web
@@ -123,13 +124,38 @@ async def admin_delete_model(request: web.Request) -> web.Response:
     return ok(result)
 
 
+@routes.get("/api/admin/models/health")
+async def admin_models_health(request: web.Request) -> web.Response:
+    require_admin(request)
+    container = container_of(request)
+    health = container.settings_store.get("model.health", {}) or {}
+    return ok({"items": health})
+
+
 @routes.post("/api/admin/models/{model_id}/test")
 async def admin_test_model(request: web.Request) -> web.Response:
     require_admin(request)
     container = container_of(request)
-    result = await catalog_of(container).test_connection(
-        request.match_info["model_id"]
-    )
+    model_id = request.match_info["model_id"]
+    try:
+        result = await catalog_of(container).test_connection(model_id)
+    except Exception as exc:  # noqa: BLE001
+        health = container.settings_store.get("model.health", {}) or {}
+        health[model_id] = {
+            "ok": False,
+            "error": getattr(exc, "message", "上游连接失败"),
+            "at": int(time.time()),
+        }
+        container.settings_store.set("model.health", health, actor_id="system")
+        raise
+    health = container.settings_store.get("model.health", {}) or {}
+    health[model_id] = {
+        "ok": True,
+        "error": "",
+        "at": int(time.time()),
+        "latency_ms": int(result.get("latency_ms") or 0),
+    }
+    container.settings_store.set("model.health", health, actor_id="system")
     return ok(result)
 
 
@@ -185,7 +211,9 @@ async def my_dashboard_stats(request: web.Request) -> web.Response:
         days = int(request.query.get("days", 30))
     except (TypeError, ValueError):
         raise ValidationError("days 必须是整数") from None
-    return ok(metering_of(container).dashboard_stats(user["id"], days=days))
+    data = metering_of(container).dashboard_stats(user["id"], days=days)
+    data["messages"] = container.message_stats.series(user["id"], days=days)
+    return ok(data)
 
 
 @routes.get("/api/me/usage/daily")

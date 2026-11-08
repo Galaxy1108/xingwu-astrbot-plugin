@@ -153,6 +153,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '申诉处理', role: 'admin' },
       },
       {
+        path: 'system-logs',
+        name: 'admin-system-logs',
+        component: () => import('@/views/admin/SystemLogsView.vue'),
+        meta: { title: '系统日志', role: 'admin' },
+      },
+      {
         path: 'audit',
         name: 'admin-audit',
         component: () => import('@/views/admin/AuditView.vue'),

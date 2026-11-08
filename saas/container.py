@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from pathlib import Path
 
 from .appeals import AppealService
@@ -27,6 +28,8 @@ from .crypto import KeyManager
 from .db import Database
 from .fake_astrbot import FakeAstrBot
 from .mailer import build_mailer
+from .message_stats import MessageStatsService
+from .observe import ErrorLogService, install_log_capture
 from .metering import MeteringService
 from .redemption import RedemptionService
 from .usage_bridge import UsageBridge
@@ -59,6 +62,7 @@ class Container:
         oauth_client=None,
     ) -> None:
         self.settings = settings
+        self.started_at = int(time.time())
         self.settings.ensure_dirs()
         self.clock = clock or SystemClock()
         self.db = Database(settings.db_path)
@@ -101,6 +105,11 @@ class Container:
             clock=self.clock,
         )
         self.settings_store = SettingsStore(self.db, self.key_manager, self.clock)
+        self.error_logs = ErrorLogService(self.db, self.clock)
+        try:
+            install_log_capture(self.settings.data_dir)
+        except Exception:  # noqa: BLE001
+            logger.warning("安装后端日志缓冲失败", exc_info=True)
         self.oauth = OAuthService(
             self.db,
             settings=settings,
@@ -127,6 +136,7 @@ class Container:
             self.db, audit=self.audit, clock=self.clock
         )
         self.usage_bridge = UsageBridge(self)
+        self.message_stats = MessageStatsService(self.db, clock=self.clock)
         self.billing = BillingService(self.db, audit=self.audit, clock=self.clock)
         self.memory_storage = MemoryStorage(
             settings.memory_dir, force_plaintext=memory_plaintext

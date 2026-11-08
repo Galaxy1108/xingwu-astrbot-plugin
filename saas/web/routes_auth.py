@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from urllib.parse import urlencode
 
 from aiohttp import web
@@ -477,6 +478,38 @@ async def set_my_encryption(request: web.Request) -> web.Response:
 
 
 # ---------------------------------------------------------------- misc
+@routes.get("/api/health")
+async def health(request: web.Request) -> web.Response:
+    container = container_of(request)
+    db_ok = True
+    try:
+        container.db.query_one("SELECT 1 AS ok")
+    except Exception:  # noqa: BLE001
+        db_ok = False
+    port = getattr(container, "port", None)
+    backend = "astrbot"
+    if port is not None and port.__class__.__name__.lower().startswith("fake"):
+        backend = "fake"
+    recent = container.db.scalar(
+        "SELECT COUNT(*) AS c FROM error_logs WHERE created_at >= ? AND level = 'error'",
+        (container.clock.now() - 3600,),
+        0,
+    )
+    return ok(
+        {
+            "status": "ok" if db_ok else "degraded",
+            "db": "ok" if db_ok else "error",
+            "backend": backend,
+            "backend_connected": backend == "astrbot",
+            "recent_errors_1h": int(recent or 0),
+            "version": container.settings.version,
+            "uptime_seconds": int(
+                time.time() - getattr(container, "started_at", time.time())
+            ),
+        }
+    )
+
+
 @routes.get("/api/version")
 async def version(request: web.Request) -> web.Response:
     settings = settings_of(request)

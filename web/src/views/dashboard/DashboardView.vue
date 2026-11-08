@@ -65,8 +65,8 @@
           <v-card class="chart-card">
             <div class="card-head">
               <div>
-                <h2 class="card-title">点数消耗趋势</h2>
-                <p class="card-sub text-muted">按日统计模型调用消耗；Tokens 为次要指标</p>
+                <h2 class="card-title">消息趋势</h2>
+                <p class="card-sub text-muted">按日统计 Bot 消息量；点数见下方 AI 模型</p>
               </div>
               <div class="head-actions">
                 <v-btn-toggle v-model="range" density="compact" variant="text" divided mandatory class="range-toggle">
@@ -74,14 +74,14 @@
                   <v-btn value="30" size="small" @click="load">30 天</v-btn>
                 </v-btn-toggle>
                 <div class="total-points">
-                  <span class="text-muted">总消耗</span>
-                  <strong>{{ formatNumber(stats?.total_points) }}</strong> 点
+                  <span class="text-muted">总消息</span>
+                  <strong>{{ formatNumber(stats?.messages?.total ?? 0) }}</strong> 条
                 </div>
               </div>
             </div>
             <transition name="page-fade" mode="out-in">
               <div :key="range" class="chart-body">
-                <UsageChart :points="stats?.points ?? []" value-label="消耗" unit="点" :height="230" />
+                <UsageChart :points="messagePoints" value-label="消息" unit="条" :height="230" />
               </div>
             </transition>
           </v-card>
@@ -123,25 +123,7 @@
               </div>
               <span class="text-muted small-note">近 {{ stats?.days }} 天</span>
             </div>
-            <div class="bar-chart" role="img" :aria-label="`近 ${stats?.days} 天每日点数柱状图`">
-              <div class="bar-grid">
-                <span v-for="line in 4" :key="line" class="bar-grid-line" />
-              </div>
-              <div class="bar-columns">
-                <div
-                  v-for="point in stats?.points ?? []"
-                  :key="point.date"
-                  class="bar-column"
-                  :title="`${point.date} · ${formatNumber(point.points)} 点 · ${formatNumber(point.requests)} 次请求 · ${formatNumber(point.tokens)} Tokens`"
-                >
-                  <div class="bar-fill" :style="{ height: `${barHeight(point.points)}%` }" />
-                </div>
-              </div>
-              <div class="bar-labels">
-                <span>{{ stats?.start?.slice(5) }}</span>
-                <span>{{ stats?.end?.slice(5) }}</span>
-              </div>
-            </div>
+            <UsageBarChart :points="stats?.points ?? []" :height="260" />
           </v-card>
         </v-col>
 
@@ -196,6 +178,7 @@ import { computed, onMounted, ref } from 'vue'
 import EmptyState from '@/components/EmptyState.vue'
 import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
 import UsageChart from '@/components/UsageChart.vue'
+import UsageBarChart from '@/components/UsageBarChart.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useBotsStore } from '@/stores/bots'
 import { getMeStats, getWallet } from '@/api/wallet'
@@ -229,15 +212,15 @@ const topBots = computed(() =>
     .sort((a, b) => b.points - a.points)
     .slice(0, 5),
 )
-const barMax = computed(() =>
-  Math.max(1, ...(stats.value?.points ?? []).map((point) => Number(point.points || 0))),
+const messagePoints = computed(() =>
+  (stats.value?.messages?.points ?? []).map((point) => ({
+    date: point.date,
+    points: Number(point.count || 0),
+    tokens: 0,
+    requests: 0,
+  })),
 )
 
-function barHeight(value: number): number {
-  const points = Number(value || 0)
-  if (points <= 0) return 0
-  return Math.max(2, (points / barMax.value) * 100)
-}
 
 function platformText(platform: string): string {
   if (!platform || platform === 'unknown') return '未知平台'

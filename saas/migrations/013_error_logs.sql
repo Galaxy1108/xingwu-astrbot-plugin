@@ -1,0 +1,15 @@
+CREATE TABLE IF NOT EXISTS error_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  level TEXT NOT NULL DEFAULT 'error',
+  source TEXT NOT NULL DEFAULT 'api',
+  path TEXT NOT NULL DEFAULT '',
+  method TEXT NOT NULL DEFAULT '',
+  status INTEGER NOT NULL DEFAULT 500,
+  code TEXT NOT NULL DEFAULT '',
+  message TEXT NOT NULL DEFAULT '',
+  detail TEXT NOT NULL DEFAULT '',
+  user_id TEXT NOT NULL DEFAULT '',
+  ip TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_error_logs_created ON error_logs(created_at DESC);

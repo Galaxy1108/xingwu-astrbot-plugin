@@ -26,3 +26,11 @@ async def test_dashboard_stats_aggregates(user_api: ApiHelper, container):
     assert data["by_model"][0]["points"] > 0
     assert len(data["points"]) == 30
     assert data["by_platform"]
+    container.message_stats.increment(
+        user_id=user["id"], bot_id="", platform="weixin_oc"
+    )
+    response, body = await user_api.get("/api/me/stats?days=30")
+    messages = body["data"]["messages"]
+    assert messages["total"] == 1
+    assert messages["by_platform"][0]["platform"] == "weixin_oc"
+    assert len(messages["points"]) == 30

@@ -170,3 +170,11 @@ saas/memory/
 - 实时 token 计量（把 AstrBot 的消息用量自动写入 usage_records）。
 - 向量索引存量回填 CLI、记忆自动抽取/反思的 LLM 实现（当前规则版巩固）。
 - 主题/多语言、可访问性系统性验收。
+
+
+## 13. 可观测性（Alpha）
+
+- `error_logs`（013）：API 中间件对 5xx / 上游错误写入脱敏后的错误记录；管理端「系统日志」页面可筛选、展开堆栈、清理。
+- `AppLogBuffer`：安装到 root logger，保留最近 2000 行并写 `data/logs/backend.log`，管理端只读查看；API key/Bearer 等自动脱敏。
+- `/api/health`：DB 连通性、后端类型、最近一小时错误数；前端全局横幅提示断连/降级。
+- 上游模型异常：模型测试失败写 `model.health` + error_logs；运行时 AstrBot provider 错误由日志缓冲记录。

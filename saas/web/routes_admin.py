@@ -219,6 +219,50 @@ async def admin_conf_profiles(request: web.Request) -> web.Response:
 
 
 # ------------------------------------------------------------- overview
+@routes.get("/api/admin/error-logs")
+async def admin_error_logs(request: web.Request) -> web.Response:
+    require_admin(request)
+    container = container_of(request)
+    page, page_size = _paging(request)
+    return ok(
+        container.error_logs.list(
+            page=page,
+            page_size=page_size,
+            level=(request.query.get("level") or "").strip() or None,
+            q=(request.query.get("q") or "").strip() or None,
+        )
+    )
+
+
+@routes.delete("/api/admin/error-logs")
+async def admin_clear_error_logs(request: web.Request) -> web.Response:
+    admin = require_admin(request)
+    container = container_of(request)
+    removed = container.error_logs.clear(older_than_days=30)
+    container.audit.log(
+        actor_id=admin["id"], actor_role="admin",
+        action="error_logs.cleared", target_type="system", target_id="",
+        ip=client_ip(request), detail={"removed": removed},
+    )
+    return ok({"removed": removed})
+
+
+@routes.get("/api/admin/logs")
+async def admin_backend_logs(request: web.Request) -> web.Response:
+    require_admin(request)
+    from ..observe import log_buffer
+
+    buffer = log_buffer()
+    if buffer is None:
+        return ok({"items": [], "available": False})
+    try:
+        lines = int(request.query.get("lines", 200))
+    except (TypeError, ValueError):
+        lines = 200
+    level = (request.query.get("level") or "").strip().upper()
+    return ok({"items": buffer.tail(lines=lines, level=level), "available": True})
+
+
 @routes.get("/api/admin/overview")
 async def admin_overview(request: web.Request) -> web.Response:
     require_admin(request)

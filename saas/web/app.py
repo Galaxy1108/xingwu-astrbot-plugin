@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,7 @@ PUBLIC_PATHS = {
     "/api/auth/oauth/providers",
     "/api/version",
     "/healthz",
+    "/api/health",
 }
 # Read-only public share links (e.g. /api/public/conversations/<token>) plus
 # OAuth start/callback (dynamic provider segment).  Bind mode still requires a
@@ -92,11 +94,59 @@ def client_ip(request: web.Request) -> str:
 # --------------------------------------------------------------------------
 # middlewares
 # --------------------------------------------------------------------------
+def _record_api_error(
+    request: web.Request,
+    *,
+    level: str,
+    status: int,
+    code: str,
+    message: str,
+    detail: str = "",
+) -> None:
+    try:
+        container = request.app["container"]
+        user = request.get("user") or {}
+        container.error_logs.record(
+            level=level,
+            source="api",
+            path=request.path,
+            method=request.method,
+            status=status,
+            code=code,
+            message=message,
+            detail=detail,
+            user_id=str(user.get("id") or ""),
+            ip=client_ip(request),
+        )
+    except Exception:  # noqa: BLE001
+        logger.debug("写入 API 错误记录失败", exc_info=True)
+
+
 @web.middleware
 async def error_middleware(request: web.Request, handler):
     try:
         return await handler(request)
     except AppError as error:
+        if error.status >= 500:
+            _record_api_error(
+                request,
+                level="error",
+                status=error.status,
+                code=error.code,
+                message=error.message,
+                detail=json.dumps(
+                    {"field": error.field, "extra": error.extra}, ensure_ascii=False
+                ),
+            )
+        elif error.code in {"upstream_error", "config_update_failed", "qr_finalize_failed"}:
+            _record_api_error(
+                request,
+                level="warning",
+                status=error.status,
+                code=error.code,
+                message=error.message,
+                detail=json.dumps(error.extra, ensure_ascii=False),
+            )
         return fail(error)
     except web.HTTPException:
         raise
@@ -104,6 +154,14 @@ async def error_middleware(request: web.Request, handler):
         return fail(AppError("请求体不是合法 JSON", code="validation_error", status=400))
     except Exception:  # noqa: BLE001
         logger.exception("未处理异常：%s %s", request.method, request.path)
+        _record_api_error(
+            request,
+            level="error",
+            status=500,
+            code="internal_error",
+            message="服务器内部错误",
+            detail=traceback.format_exc(),
+        )
         return fail(AppError("服务器内部错误，请稍后重试"))
 
 

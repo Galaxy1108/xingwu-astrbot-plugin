@@ -380,6 +380,15 @@ Memory 对象：
 - 用户侧 `GET /api/access-log` 可看到这些访问记录。
 - `GET/PUT /api/admin/users/{id}/encryption`：GET 同用户状态；PUT 只允许 `{enabled:true}`（强制开启），关闭返回 403。
 
+## 4.10 健康检查与可观测性
+
+- `GET /api/health`（公开）→ `{status:"ok|degraded",db,backend:"astrbot|fake",backend_connected,recent_errors_1h,version,uptime_seconds}`
+- 控制台全局轮询该接口，失败时显示「后端连接失败」横幅。
+- `GET /api/admin/error-logs?page=&page_size=&level=&q=` → 用户操作触发的 5xx/上游错误记录（自动脱敏）。
+- `DELETE /api/admin/error-logs` → 清理 30 天前记录。
+- `GET /api/admin/logs?lines=&level=` → 进程内后端日志缓冲（AstrBot 日志/插件日志），用于排查上游模型异常。
+- `POST /api/admin/models/{id}/test` 失败会记录 `model.health` 与错误日志；`GET /api/admin/models/health` 查看。
+
 ## 5.0 用户详情
 
 - `GET /api/admin/users/{id}` → 用户（含 display_name/encryption）、`wallet`、`quota`、

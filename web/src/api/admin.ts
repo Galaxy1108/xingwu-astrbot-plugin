@@ -8,6 +8,7 @@ import type {
   AdminOrderConfirmResult,
   AdminOrderCreatePayload,
   AdminOrderCreateResult,
+  AdminErrorLog,
   AdminInvite,
   AdminInviteCreatePayload,
   AdminOAuthSettings,
@@ -391,4 +392,38 @@ export function createAdminInvite(
 
 export function revokeAdminInvite(codeHint: string): Promise<{ revoked: boolean }> {
   return api.delete<{ revoked: boolean }>(`/admin/invites/${encodeURIComponent(codeHint)}`)
+}
+
+
+export interface BackendLogLine {
+  time: number
+  level: string
+  logger: string
+  message: string
+}
+
+export function listErrorLogs(
+  page = 1,
+  pageSize = 20,
+  filters: { level?: string; q?: string } = {},
+): Promise<PageResult<AdminErrorLog>> {
+  return api.get<PageResult<AdminErrorLog>>('/admin/error-logs', {
+    page,
+    page_size: pageSize,
+    ...filters,
+  })
+}
+
+export function clearErrorLogs(): Promise<{ removed: number }> {
+  return api.delete<{ removed: number }>('/admin/error-logs')
+}
+
+export function listBackendLogs(
+  lines = 200,
+  level = '',
+): Promise<{ items: BackendLogLine[]; available: boolean }> {
+  return api.get<{ items: BackendLogLine[]; available: boolean }>('/admin/logs', {
+    lines,
+    level,
+  })
 }

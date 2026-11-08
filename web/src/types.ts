@@ -372,6 +372,14 @@ export interface MeStats {
   total_tokens: number
   total_requests: number
   points: UsageDailyPoint[]
+  messages?: {
+    days: number
+    start: string
+    end: string
+    total: number
+    points: Array<{ date: string; count: number }>
+    by_platform: Array<{ platform: string; count: number }>
+  }
   by_model: ModelUsageStat[]
   by_bot: BotUsageStat[]
   by_platform: PlatformUsageStat[]
@@ -882,6 +890,29 @@ export interface ModelProfileInput {
 
 export interface ModelProfileList {
   items: ModelProfile[]
+}
+
+export interface HealthInfo {
+  status: 'ok' | 'degraded'
+  db: string
+  backend: 'astrbot' | 'fake' | string
+  version: string
+  recent_errors_1h?: number
+}
+
+export interface AdminErrorLog {
+  id: number
+  level: string
+  source: string
+  path: string
+  method: string
+  status: number
+  code: string
+  message: string
+  detail: string
+  user_id: string
+  ip: string
+  created_at: number
 }
 
 export interface AdminInvite {

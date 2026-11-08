@@ -1,5 +1,6 @@
 <template>
   <v-app>
+    <BackendHealthBanner />
     <router-view />
     <v-snackbar
       v-model="ui.snackbar.show"
@@ -18,6 +19,7 @@
 </template>
 
 <script setup lang="ts">
+import BackendHealthBanner from '@/components/BackendHealthBanner.vue'
 import { useUiStore } from '@/stores/ui'
 import { useThemeMode } from '@/composables/useThemeMode'
 
