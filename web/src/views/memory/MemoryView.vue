@@ -4,35 +4,38 @@
       :title="pageTitle"
       description="记忆由对话自动记录（LLM 工具/命令），本页管理已有记忆，不提供手动新建入口。"
       :back-to="`/bots/${botId}`"
-    >
-      <template #actions>
-        <v-btn variant="text" prepend-icon="mdi-magnify" @click="openSearch">检索预览</v-btn>
-        <v-btn
-          variant="tonal"
-          color="primary"
-          prepend-icon="mdi-upload"
-          data-testid="memory-import"
-          @click="openImport"
-        >
-          导入 JSON 快照
-        </v-btn>
-        <v-btn
-          variant="tonal"
-          color="primary"
-          prepend-icon="mdi-download"
-          :loading="exporting"
-          data-testid="memory-export"
-          @click="onExport"
-        >
-          导出 JSON
-        </v-btn>
-        <v-btn variant="text" prepend-icon="mdi-refresh" :loading="bucket.loading" @click="reload">
-          刷新
-        </v-btn>
-      </template>
-    </PageHeader>
+    />
 
     <BotTabs :bot-id="botId" active="memory" />
+
+    <div class="content-toolbar">
+      <span class="text-muted toolbar-hint">记忆由对话自动记录，可导入/导出快照</span>
+      <v-spacer />
+      <v-btn variant="text" size="small" prepend-icon="mdi-magnify" @click="openSearch">检索预览</v-btn>
+      <v-btn
+        size="small"
+        variant="tonal"
+        color="primary"
+        prepend-icon="mdi-upload"
+        data-testid="memory-import"
+        @click="openImport"
+      >
+        导入 JSON 快照
+      </v-btn>
+      <v-btn
+        size="small"
+        variant="tonal"
+        color="primary"
+        prepend-icon="mdi-download"
+        data-testid="memory-export"
+        @click="onExport"
+      >
+        导出 JSON
+      </v-btn>
+      <v-btn size="small" variant="text" prepend-icon="mdi-refresh" :loading="bucket.loading" @click="reload">
+        刷新
+      </v-btn>
+    </div>
 
     <v-alert type="info" variant="tonal" density="compact" class="mb-4" icon="mdi-brain">
       记忆由对话自动记录；可导入/导出 JSON 快照（含记忆与笔记，导入按内容去重）。
@@ -139,9 +142,7 @@
                     >
                       mdi-pin
                     </v-icon>
-                    <button type="button" class="content-link" @click="openEdit(memory)">
-                      {{ truncate(memory.content, 120) }}
-                    </button>
+                    <span class="content-text">{{ truncate(memory.content, 120) }}</span>
                     <v-chip
                       v-if="isAutoExtracted(memory)"
                       size="x-small"
@@ -307,10 +308,11 @@
     </template>
 
     <v-navigation-drawer
+      v-if="editorOpen"
       v-model="editorOpen"
       location="right"
       temporary
-      :width="480"
+      :width="isNarrow ? 360 : 480"
       class="memory-drawer"
     >
       <div class="drawer-inner">
@@ -977,6 +979,15 @@ async function runSearch(): Promise<void> {
   display: flex;
   align-items: flex-start;
   gap: 6px;
+}
+
+.content-text {
+  display: inline;
+  color: var(--console-text);
+  font: inherit;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .content-link {
