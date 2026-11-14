@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from aiohttp import web
@@ -13,6 +14,7 @@ from ..errors import AppError, Forbidden, ValidationError
 from .app import client_ip, container_of, current_user, ok
 
 routes = web.RouteTableDef()
+logger = logging.getLogger(__name__)
 
 
 def require_admin(request: web.Request) -> dict[str, Any]:
@@ -219,6 +221,66 @@ async def admin_conf_profiles(request: web.Request) -> web.Response:
 
 
 # ------------------------------------------------------------- overview
+@routes.get("/api/admin/sandbox")
+async def admin_sandbox(request: web.Request) -> web.Response:
+    require_admin(request)
+    container = container_of(request)
+    from ..sandbox_policy import SETTINGS_KEY, detect_platform, normalize_policy
+
+    raw = container.settings_store.get(SETTINGS_KEY, {}) or {}
+    policy = normalize_policy(raw)
+    platform_info = detect_platform()
+    return ok({"policy": policy, "platform": platform_info})
+
+
+@routes.put("/api/admin/sandbox")
+async def admin_update_sandbox(request: web.Request) -> web.Response:
+    admin = require_admin(request)
+    container = container_of(request)
+    from ..errors import ValidationError
+    from ..sandbox_policy import (
+        SETTINGS_KEY,
+        config_patch,
+        detect_platform,
+        install_runtime_limits,
+        validate_policy,
+    )
+
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise ValidationError("请求体必须是 JSON 对象")
+    platform_info = detect_platform()
+    try:
+        policy = validate_policy(body.get("policy", body), platform_info=platform_info)
+    except ValueError as exc:
+        raise ValidationError(str(exc), field="policy") from None
+    container.settings_store.set(SETTINGS_KEY, policy, actor_id=admin["id"])
+    updated = 0
+    patch = config_patch(policy)
+    for row in container.db.query(
+        "SELECT id, conf_id FROM bots WHERE status != 'deleted' AND conf_id != ''"
+    ):
+        try:
+            await container.port.update_config(row["conf_id"], patch)
+            updated += 1
+        except Exception:  # noqa: BLE001
+            logger.warning("应用沙盒配置失败：%s", row["id"], exc_info=True)
+    limits_installed = install_runtime_limits(policy)
+    container.audit.log(
+        actor_id=admin["id"], actor_role="admin", action="sandbox.updated",
+        target_type="system", target_id="", ip=client_ip(request),
+        detail={"policy": policy, "bots_updated": updated, "limits_installed": limits_installed},
+    )
+    return ok(
+        {
+            "policy": policy,
+            "platform": platform_info,
+            "bots_updated": updated,
+            "limits_installed": limits_installed,
+        }
+    )
+
+
 @routes.get("/api/admin/error-logs")
 async def admin_error_logs(request: web.Request) -> web.Response:
     require_admin(request)

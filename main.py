@@ -54,6 +54,18 @@ class SaaSBotPlugin(Star):
             )
             self.conversation_patch = ConversationEncryptionPatch(self.container)
             self.conversation_patch.install()
+            try:
+                from .saas.sandbox_policy import (
+                    SETTINGS_KEY,
+                    install_runtime_limits,
+                    normalize_policy,
+                )
+
+                install_runtime_limits(
+                    normalize_policy(self.container.settings_store.get(SETTINGS_KEY, {}))
+                )
+            except Exception:  # noqa: BLE001
+                logger.warning("SaaS 沙盒资源限制初始化失败", exc_info=True)
         except Exception:
             logger.error("SaaS 核心初始化失败（控制台不会启动）", exc_info=True)
             return

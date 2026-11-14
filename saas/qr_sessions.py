@@ -62,6 +62,7 @@ class QrSessionService:
         port: AstrBotPort,
         settings: Settings,
         audit: AuditService,
+        settings_store: Any = None,
         clock: Clock | None = None,
     ) -> None:
         self.db = db
@@ -69,6 +70,7 @@ class QrSessionService:
         self.port = port
         self.settings = settings
         self.audit = audit
+        self.settings_store = settings_store
         self.clock = clock or SystemClock()
         self._live: dict[str, _LiveSession] = {}
 
@@ -383,6 +385,14 @@ class QrSessionService:
             ip=ip,
         )
         bot_id = bot["id"]
+        if self.settings_store is not None:
+            try:
+                from .sandbox_policy import SETTINGS_KEY, config_patch, normalize_policy
+
+                policy = normalize_policy(self.settings_store.get(SETTINGS_KEY, {}))
+                await self.port.update_config(bot["conf_id"], config_patch(policy))
+            except Exception:  # noqa: BLE001
+                logger.warning("新 Bot 应用沙盒策略失败", exc_info=True)
         if row.get("model_profile_id"):
             import json as _json
 

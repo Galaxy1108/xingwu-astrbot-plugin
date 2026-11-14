@@ -892,6 +892,37 @@ export interface ModelProfileList {
   items: ModelProfile[]
 }
 
+export interface SandboxLimits {
+  cpu_seconds: number
+  memory_mb: number
+  file_size_mb: number
+  open_files: number
+  processes: number
+}
+
+export interface SandboxPolicy {
+  enabled: boolean
+  runtime: 'none' | 'local' | 'sandbox'
+  require_admin: boolean
+  booter: 'docker' | 'shipyard_neo' | 'cua'
+  limits: SandboxLimits
+}
+
+export interface SandboxPlatform {
+  os: string
+  backend: string
+  available: boolean
+  binary: string
+  hint: string
+}
+
+export interface SandboxConfig {
+  policy: SandboxPolicy
+  platform: SandboxPlatform
+  bots_updated?: number
+  limits_installed?: boolean
+}
+
 export interface HealthInfo {
   status: 'ok' | 'degraded'
   db: string

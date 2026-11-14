@@ -178,3 +178,14 @@ saas/memory/
 - `AppLogBuffer`：安装到 root logger，保留最近 2000 行并写 `data/logs/backend.log`，管理端只读查看；API key/Bearer 等自动脱敏。
 - `/api/health`：DB 连通性、后端类型、最近一小时错误数；前端全局横幅提示断连/降级。
 - 上游模型异常：模型测试失败写 `model.health` + error_logs；运行时 AstrBot provider 错误由日志缓冲记录。
+
+
+## 14. Agent 沙盒策略
+
+- 管理端「Agent 沙盒」统一配置 AstrBot Computer Use：
+  - `none`：关闭；`local`：使用平台本地沙盒；`sandbox`：第三方沙盒（Docker / Shipyard Neo / CUA）。
+  - `require_admin` 控制普通租户是否可使用文件/命令工具。
+- 平台差异：Linux 依赖 `bubblewrap (bwrap)`，macOS 使用 `/usr/bin/sandbox-exec`（Seatbelt）；Windows 不支持本地进程沙盒，需选择 `none` 或第三方沙盒。管理端保存时检测并拒绝不可用的 local 配置。
+- 资源限制：`sandbox_policy.install_runtime_limits()` 在进程内包装 `SandboxLimits`，对本地沙盒设置 CPU 时间、内存、单文件大小、打开文件数、进程数 rlimit。
+- 应用范围：保存时更新所有 SaaS 管理 Bot 的配置；新 Bot finalize 时套用策略；重启后 main.py 重新安装 rlimit 限制。
+- 配置存储：`platform_settings["sandbox.policy"]`（加密平台设置，无需新表）。

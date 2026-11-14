@@ -194,6 +194,7 @@ class Container:
             port=self.port,
             settings=settings,
             audit=self.audit,
+            settings_store=self.settings_store,
             clock=self.clock,
         )
         self.conversation_shares = ConversationShareService(

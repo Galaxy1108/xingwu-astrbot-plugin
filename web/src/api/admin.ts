@@ -9,6 +9,8 @@ import type {
   AdminOrderCreatePayload,
   AdminOrderCreateResult,
   AdminErrorLog,
+  SandboxConfig,
+  SandboxPolicy,
   AdminInvite,
   AdminInviteCreatePayload,
   AdminOAuthSettings,
@@ -426,4 +428,15 @@ export function listBackendLogs(
     lines,
     level,
   })
+}
+
+
+export function getSandboxConfig(): Promise<SandboxConfig> {
+  return api.get<SandboxConfig>('/admin/sandbox')
+}
+
+export function updateSandboxConfig(
+  policy: SandboxPolicy,
+): Promise<SandboxConfig> {
+  return api.put<SandboxConfig>('/admin/sandbox', { policy })
 }
