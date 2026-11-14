@@ -392,13 +392,18 @@ Memory 对象：
 ## 4.11 Agent 沙盒（管理员）
 
 - `GET /api/admin/sandbox` → `{policy, platform}`
-  - policy: `{enabled,runtime:none|local|sandbox,require_admin,booter:docker|shipyard_neo|cua,limits:{cpu_seconds,memory_mb,file_size_mb,open_files,processes}}`
+  - policy: `{enabled,allow_user_config,runtime:none|local|sandbox,require_admin,booter:docker|shipyard_neo|cua,limits:{cpu_seconds,memory_mb,file_size_mb,open_files,processes}}`
+  - 同时返回 `bots:[{id,name,status,owner_email,agent_enabled,runtime}]`，便于管理员查看各 Bot 的 Agent 状态。
   - platform: `{os,backend,available,binary,hint}`（Linux bubblewrap / macOS Seatbelt / Windows unsupported）
 - `PUT /api/admin/sandbox` `{policy}`：
   - 校验 runtime；本地沙盒在平台不支持时 400；
   - 保存 `sandbox.policy`，写入所有现有 Bot 的 AstrBot 配置（runtime/require_admin/booter），并尝试安装本地 rlimit；
   - 返回 `{policy,platform,bots_updated,limits_installed}`；审计 `sandbox.updated`。
 - 新 Bot 创建/扫码 finalize 时自动套用当前策略。
+- 用户侧：`GET /api/bots/{id}` 的 `bot.sandbox` 返回 `{enabled,policy_enabled,agent_enabled,user_configurable,runtime,booter,platform,limits,require_admin}`；
+  `PATCH /api/bots/{id}` `settings:{agent_enabled:bool}` 可在 `allow_user_config=true` 时单独关闭/开启该 Bot 的 Agent；
+  管理员关闭策略时返回 409 `sandbox_disabled`，不允许用户配置时返回 403 `sandbox_locked`。
+- 用户只能开关 Agent 能力并查看管理员限制；CPU/内存等 rlimit 由管理员统一设置，不能由用户突破。
 - 资源限制通过进程 rlimit 施加：`RLIMIT_CPU`、`RLIMIT_AS`、`RLIMIT_FSIZE`、`RLIMIT_NOFILE`、`RLIMIT_NPROC`（仅 local 沙盒；第三方沙盒由容器限制）。
 
 ## 5.0 用户详情

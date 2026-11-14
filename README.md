@@ -12,7 +12,7 @@
 > - M4 计费：模型 API 配置（密钥加密）+ 点数定价 + 用量记录/扣减；已接入 AstrBot `on_llm_response` 真实 Token 计量。
 - M5 账号：密码登录/找回密码、无邮箱邀请注册、邮箱绑定、GitHub OAuth 登录与绑定。
 - M6 运营：封禁/解禁与申诉、扫码成功后才创建 Bot、对话历史分享、笔记库、记忆主动注入/自动提取。
-- Agent 沙盒：管理端统一配置 none/local/第三方沙盒、仅管理员可用、CPU/内存/文件/进程 rlimit，并适配 Linux bubblewrap / macOS Seatbelt / Windows 不支持提示。
+- Agent 沙盒：管理端统一配置 none/local/第三方沙盒、仅管理员可用、CPU/内存/文件/进程 rlimit；用户端可查看策略与限制、在管理员允许时单独关闭自己的 Agent；适配 Linux bubblewrap / macOS Seatbelt / Windows 不支持提示。
 - 可观测性：`/api/health` 全局健康检查与前端断连横幅、API 错误自动脱敏入库（系统日志）、AstrBot 后端运行日志缓冲查看。
 
 ## 账号体系

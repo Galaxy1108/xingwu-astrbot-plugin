@@ -179,6 +179,7 @@ export interface QrSession {
 
 export interface BotSettings {
   streaming: boolean
+  agent_enabled?: boolean
   compression_max_turns: number
   compression_overflow_strategy: string
 }
@@ -201,6 +202,17 @@ export interface Bot {
   admin_disabled?: boolean
   admin_disabled_reason?: string
   settings?: BotSettings
+  sandbox?: {
+    enabled: boolean
+    policy_enabled: boolean
+    agent_enabled: boolean
+    user_configurable: boolean
+    runtime: string
+    booter: string
+    require_admin: boolean
+    platform: SandboxPlatform
+    limits: SandboxLimits
+  }
   qr: QrSession | null
 }
 
@@ -902,6 +914,7 @@ export interface SandboxLimits {
 
 export interface SandboxPolicy {
   enabled: boolean
+  allow_user_config: boolean
   runtime: 'none' | 'local' | 'sandbox'
   require_admin: boolean
   booter: 'docker' | 'shipyard_neo' | 'cua'
@@ -919,6 +932,14 @@ export interface SandboxPlatform {
 export interface SandboxConfig {
   policy: SandboxPolicy
   platform: SandboxPlatform
+  bots?: Array<{
+    id: string
+    name: string
+    status: string
+    owner_email: string
+    agent_enabled: boolean
+    runtime: string
+  }>
   bots_updated?: number
   limits_installed?: boolean
 }

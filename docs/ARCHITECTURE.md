@@ -188,4 +188,5 @@ saas/memory/
 - 平台差异：Linux 依赖 `bubblewrap (bwrap)`，macOS 使用 `/usr/bin/sandbox-exec`（Seatbelt）；Windows 不支持本地进程沙盒，需选择 `none` 或第三方沙盒。管理端保存时检测并拒绝不可用的 local 配置。
 - 资源限制：`sandbox_policy.install_runtime_limits()` 在进程内包装 `SandboxLimits`，对本地沙盒设置 CPU 时间、内存、单文件大小、打开文件数、进程数 rlimit。
 - 应用范围：保存时更新所有 SaaS 管理 Bot 的配置；新 Bot finalize 时套用策略；重启后 main.py 重新安装 rlimit 限制。
+- 用户侧：Bot 设置展示 Agent 沙盒状态、运行方式、平台与管理员资源限制；管理员允许时用户可单独关闭该 Bot 的 Agent 能力（仅影响该 Bot 配置，不能修改管理员上限）。
 - 配置存储：`platform_settings["sandbox.policy"]`（加密平台设置，无需新表）。

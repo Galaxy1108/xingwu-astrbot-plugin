@@ -13,10 +13,35 @@ from .app import client_ip, container_of, current_user, ok, settings_of
 routes = web.RouteTableDef()
 
 
+def _with_sandbox(container, bot: dict) -> dict:
+    from ..sandbox_policy import SETTINGS_KEY, detect_platform, normalize_policy
+
+    policy = normalize_policy(container.settings_store.get(SETTINGS_KEY, {}))
+    settings = dict(bot.get("settings") or {})
+    agent_enabled = settings.get("agent_enabled")
+    if agent_enabled is None:
+        agent_enabled = bool(policy["enabled"])
+    effective = bool(policy["enabled"] and agent_enabled)
+    platform_info = detect_platform()
+    bot = dict(bot)
+    bot["sandbox"] = {
+        "enabled": effective,
+        "policy_enabled": bool(policy["enabled"]),
+        "agent_enabled": bool(agent_enabled),
+        "user_configurable": bool(policy["allow_user_config"]),
+        "runtime": policy["runtime"] if effective else "none",
+        "booter": policy["booter"],
+        "platform": platform_info,
+        "limits": policy["limits"],
+        "require_admin": bool(policy["require_admin"]),
+    }
+    return bot
+
+
 def _with_qr(container, bot: dict) -> dict:
+    bot = _with_sandbox(container, bot)
     session = container.qr.active_session(bot["id"])
     if session is not None:
-        bot = dict(bot)
         bot["qr"] = session
     return bot
 
@@ -93,6 +118,20 @@ async def patch_bot(request: web.Request) -> web.Response:
             raise ValidationError("settings 必须是对象", field="settings")
         current = dict((bot.get("settings") or {}))
         patch_config: dict[str, Any] = {}
+        if "agent_enabled" in incoming:
+            from ..sandbox_policy import SETTINGS_KEY, config_patch, normalize_policy
+
+            policy = normalize_policy(container.settings_store.get(SETTINGS_KEY, {}))
+            if not policy["enabled"]:
+                raise AppError("管理员尚未启用 Agent 能力", code="sandbox_disabled", status=409)
+            if not policy["allow_user_config"]:
+                raise AppError(
+                    "Agent 能力由管理员统一管理，用户不能单独修改",
+                    code="sandbox_locked",
+                    status=403,
+                )
+            current["agent_enabled"] = bool(incoming["agent_enabled"])
+            patch_config.update(config_patch(policy, agent_enabled=current["agent_enabled"]))
         if "streaming" in incoming:
             current["streaming"] = bool(incoming["streaming"])
             patch_config["provider_settings.streaming_response"] = current["streaming"]

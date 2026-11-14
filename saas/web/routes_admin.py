@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -230,7 +231,32 @@ async def admin_sandbox(request: web.Request) -> web.Response:
     raw = container.settings_store.get(SETTINGS_KEY, {}) or {}
     policy = normalize_policy(raw)
     platform_info = detect_platform()
-    return ok({"policy": policy, "platform": platform_info})
+    bots = []
+    for row in container.db.query(
+        "SELECT b.id, b.name, b.status, b.snapshot, u.email AS owner_email "
+        "FROM bots b LEFT JOIN users u ON u.id = b.user_id "
+        "WHERE b.status != 'deleted' ORDER BY b.created_at DESC"
+    ):
+        try:
+            snapshot = json.loads(row["snapshot"] or "{}")
+        except (TypeError, ValueError):
+            snapshot = {}
+        settings = snapshot.get("settings") or {}
+        agent_enabled = settings.get("agent_enabled")
+        if agent_enabled is None:
+            agent_enabled = bool(policy["enabled"])
+        effective = bool(policy["enabled"] and agent_enabled)
+        bots.append(
+            {
+                "id": row["id"],
+                "name": row["name"],
+                "status": row["status"],
+                "owner_email": row["owner_email"] or "",
+                "agent_enabled": bool(agent_enabled),
+                "runtime": policy["runtime"] if effective else "none",
+            }
+        )
+    return ok({"policy": policy, "platform": platform_info, "bots": bots})
 
 
 @routes.put("/api/admin/sandbox")
@@ -256,12 +282,22 @@ async def admin_update_sandbox(request: web.Request) -> web.Response:
         raise ValidationError(str(exc), field="policy") from None
     container.settings_store.set(SETTINGS_KEY, policy, actor_id=admin["id"])
     updated = 0
-    patch = config_patch(policy)
     for row in container.db.query(
-        "SELECT id, conf_id FROM bots WHERE status != 'deleted' AND conf_id != ''"
+        "SELECT id, conf_id, snapshot FROM bots "
+        "WHERE status != 'deleted' AND conf_id != ''"
     ):
         try:
-            await container.port.update_config(row["conf_id"], patch)
+            snapshot = json.loads(row["snapshot"] or "{}")
+        except (TypeError, ValueError):
+            snapshot = {}
+        settings = snapshot.get("settings") or {}
+        agent_enabled = settings.get("agent_enabled")
+        if agent_enabled is None:
+            agent_enabled = bool(policy["enabled"])
+        try:
+            await container.port.update_config(
+                row["conf_id"], config_patch(policy, agent_enabled=bool(agent_enabled))
+            )
             updated += 1
         except Exception:  # noqa: BLE001
             logger.warning("应用沙盒配置失败：%s", row["id"], exc_info=True)

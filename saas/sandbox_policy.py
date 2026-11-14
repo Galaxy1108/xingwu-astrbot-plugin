@@ -14,6 +14,7 @@ RUNTIMES = {"none", "local", "sandbox"}
 BOOTERS = {"docker", "shipyard_neo", "cua"}
 DEFAULT_POLICY: dict[str, Any] = {
     "enabled": False,
+    "allow_user_config": False,
     "runtime": "none",
     "require_admin": True,
     "booter": "docker",
@@ -101,6 +102,7 @@ def normalize_policy(raw: Any) -> dict[str, Any]:
             merged_limits[key] = DEFAULT_POLICY["limits"][key]
     return {
         "enabled": bool(data.get("enabled", False)),
+        "allow_user_config": bool(data.get("allow_user_config", False)),
         "runtime": runtime,
         "require_admin": bool(data.get("require_admin", True)),
         "booter": booter,
@@ -118,9 +120,12 @@ def validate_policy(policy: dict[str, Any], *, platform_info: dict[str, Any] | N
     return normalized
 
 
-def config_patch(policy: dict[str, Any]) -> dict[str, Any]:
-    """AstrBot config patch applied to every SaaS-managed bot config."""
-    runtime = policy["runtime"] if policy.get("enabled") else "none"
+def config_patch(
+    policy: dict[str, Any], *, agent_enabled: bool | None = None
+) -> dict[str, Any]:
+    """AstrBot config patch applied to a SaaS-managed bot config."""
+    enabled = policy.get("enabled") if agent_enabled is None else bool(agent_enabled and policy.get("enabled"))
+    runtime = policy["runtime"] if enabled else "none"
     return {
         "provider_settings.computer_use_runtime": runtime,
         "provider_settings.computer_use_require_admin": bool(policy.get("require_admin", True)),

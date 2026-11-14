@@ -140,6 +140,63 @@
           </p>
         </v-card>
 
+
+        <v-card class="panel settings-panel mt-4">
+          <div class="settings-section-head">
+            <h2 class="section-title">Agent 能力（沙盒）</h2>
+            <p class="text-muted settings-desc">
+              是否允许该 Bot 使用文件/命令/Computer Use 工具；运行环境与资源上限由管理员统一配置。
+            </p>
+          </div>
+          <div class="sandbox-status">
+            <v-chip size="small" variant="tonal" :color="sandboxEnabled ? 'success' : 'default'">
+              {{ sandboxEnabled ? 'Agent 已启用' : 'Agent 已关闭' }}
+            </v-chip>
+            <span class="text-muted">运行方式：{{ sandbox?.runtime || 'none' }}</span>
+            <span class="text-muted">平台：{{ sandbox?.platform?.os || '—' }} / {{ sandbox?.platform?.backend || '—' }}</span>
+          </div>
+          <v-alert
+            v-if="!sandbox?.policy_enabled"
+            type="info"
+            variant="tonal"
+            density="compact"
+            class="mt-3"
+          >
+            管理员尚未启用 Agent 能力。
+          </v-alert>
+          <template v-else>
+            <div class="switch-row">
+              <div>
+                <div class="switch-label">允许该 Bot 使用 Agent 工具</div>
+                <div class="text-muted switch-hint">
+                  {{ sandbox?.user_configurable ? '可为单个 Bot 关闭；关闭后不会调用沙盒。' : '由管理员统一管理，当前不可单独修改。' }}
+                </div>
+              </div>
+              <v-switch
+                v-model="settingsAgentEnabled"
+                :disabled="!sandbox?.user_configurable"
+                color="primary"
+                hide-details
+                inset
+                data-testid="bot-settings-agent-enabled"
+              />
+            </div>
+            <div class="sandbox-limits">
+              <div class="sandbox-limits__title text-muted">管理员限制</div>
+              <div class="sandbox-limit-grid">
+                <span>CPU {{ sandbox?.limits?.cpu_seconds ?? '—' }} 秒</span>
+                <span>内存 {{ sandbox?.limits?.memory_mb ?? '—' }} MB</span>
+                <span>单文件 {{ sandbox?.limits?.file_size_mb ?? '—' }} MB</span>
+                <span>句柄 {{ sandbox?.limits?.open_files ?? '—' }}</span>
+                <span>进程 {{ sandbox?.limits?.processes ?? '—' }}</span>
+              </div>
+              <p class="text-muted sandbox-note">
+                资源上限由服务端进程 rlimit 执行，用户不能超过管理员设置；Windows 本地沙盒不可用时请使用第三方沙盒或关闭。
+              </p>
+            </div>
+          </template>
+        </v-card>
+
         <v-card class="panel settings-panel mt-4">
           <button type="button" class="advanced-toggle" @click="advancedOpen = !advancedOpen">
             <v-icon size="18">mdi-tune-variant</v-icon>
@@ -355,6 +412,7 @@ const settingsName = ref('')
 const settingsModelId = ref('')
 const settingsEnabled = ref(false)
 const settingsStreaming = ref(false)
+const settingsAgentEnabled = ref(false)
 const settingsCompressionMaxTurns = ref(10)
 const settingsCompressionStrategy = ref('truncate_by_turns')
 const advancedOpen = ref(false)
@@ -362,6 +420,9 @@ const settingsSaving = ref(false)
 const settingsError = ref('')
 const models = ref<ModelProfile[]>([])
 const modelsLoading = ref(false)
+
+const sandbox = computed(() => bot.value?.sandbox)
+const sandboxEnabled = computed(() => Boolean(sandbox.value?.enabled))
 
 const compressionStrategies = [
   { title: '按轮次截断（truncate_by_turns）', value: 'truncate_by_turns' },
@@ -429,6 +490,9 @@ function hydrateSettings(): void {
   settingsModelId.value = bot.value.model_profile_id || ''
   settingsEnabled.value = bot.value.enabled
   settingsStreaming.value = bot.value.settings?.streaming ?? false
+  settingsAgentEnabled.value = Boolean(
+    bot.value.settings?.agent_enabled ?? bot.value.sandbox?.agent_enabled,
+  )
   settingsCompressionMaxTurns.value = bot.value.settings?.compression_max_turns ?? 10
   settingsCompressionStrategy.value =
     bot.value.settings?.compression_overflow_strategy || 'truncate_by_turns'
@@ -462,6 +526,7 @@ async function saveSettings(): Promise<void> {
       enabled: settingsEnabled.value,
       settings: {
         streaming: settingsStreaming.value,
+        agent_enabled: settingsAgentEnabled.value,
         compression_max_turns: turns,
         compression_overflow_strategy: settingsCompressionStrategy.value,
       },
@@ -568,6 +633,39 @@ async function onDelete(): Promise<void> {
 .settings-desc {
   margin: 4px 0 0;
   font-size: 12px;
+}
+
+.sandbox-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+}
+
+.sandbox-limits {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--console-surface-variant);
+}
+
+.sandbox-limits__title {
+  font-size: 12px;
+}
+
+.sandbox-limit-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 6px;
+  font-size: 12.5px;
+}
+
+.sandbox-note {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  line-height: 1.6;
 }
 
 .settings-global-note {
@@ -871,6 +969,39 @@ async function onDelete(): Promise<void> {
 .settings-desc {
   margin: 4px 0 0;
   font-size: 12px;
+}
+
+.sandbox-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+}
+
+.sandbox-limits {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--console-surface-variant);
+}
+
+.sandbox-limits__title {
+  font-size: 12px;
+}
+
+.sandbox-limit-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 6px;
+  font-size: 12.5px;
+}
+
+.sandbox-note {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  line-height: 1.6;
 }
 
 .settings-global-note {

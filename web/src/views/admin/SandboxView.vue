@@ -39,6 +39,13 @@
           />
           <div class="switch-row">
             <div>
+              <div class="switch-title">允许用户为单个 Bot 关闭 Agent</div>
+              <div class="text-muted switch-desc">关闭后普通用户只能查看策略；开启后可在 Bot 设置里关闭自己的 Agent 能力。</div>
+            </div>
+            <v-switch v-model="policy.allow_user_config" color="primary" inset hide-details />
+          </div>
+          <div class="switch-row">
+            <div>
               <div class="switch-title">仅管理员可使用 Computer Use</div>
               <div class="text-muted switch-desc">对应 AstrBot `computer_use_require_admin`；普通租户无法调用文件/命令工具。</div>
             </div>
@@ -78,7 +85,22 @@
       </v-col>
 
       <v-col cols="12" lg="4">
-        <v-card class="pa-5">
+        <v-card class="pa-5" v-if="bots.length">
+          <h2 class="section-title">Bot Agent 状态</h2>
+          <p class="section-sub text-muted mb-3">共 {{ bots.length }} 个 Bot</p>
+          <div class="bot-status-list">
+            <div v-for="item in bots" :key="item.id" class="bot-status-row">
+              <div class="bot-status-main">
+                <strong>{{ item.name }}</strong>
+                <span class="text-muted">{{ item.owner_email || item.id }}</span>
+              </div>
+              <v-chip size="x-small" variant="tonal" :color="item.agent_enabled ? 'success' : 'default'">
+                {{ item.agent_enabled ? item.runtime : '关闭' }}
+              </v-chip>
+            </div>
+          </div>
+        </v-card>
+        <v-card class="pa-5" :class="{ 'mt-4': bots.length }">
           <h2 class="section-title">应用范围</h2>
           <ul class="tips">
             <li>保存后写入所有现有 Bot 的配置文件，并作为新 Bot 的默认策略。</li>
@@ -111,8 +133,10 @@ const error = ref('')
 const saved = ref('')
 const applied = ref<SandboxConfig | null>(null)
 const platform = ref<SandboxPlatform>({ os: '', backend: '', available: false, binary: '', hint: '' })
+const bots = ref<NonNullable<SandboxConfig['bots']>>([])
 const policy = ref<SandboxPolicy>({
   enabled: false,
+  allow_user_config: false,
   runtime: 'none',
   require_admin: true,
   booter: 'docker',
@@ -138,6 +162,7 @@ async function load(): Promise<void> {
     const result = await getSandboxConfig()
     policy.value = result.policy
     platform.value = result.platform
+    bots.value = result.bots ?? []
   } catch (err) {
     error.value = errorMessage(err, '加载沙盒配置失败')
   } finally {
@@ -153,6 +178,7 @@ async function save(): Promise<void> {
     const result = await updateSandboxConfig(policy.value)
     policy.value = result.policy
     platform.value = result.platform
+    bots.value = result.bots ?? []
     applied.value = result
     saved.value = '沙盒策略已保存并应用'
   } catch (err) {
@@ -195,6 +221,32 @@ async function save(): Promise<void> {
 .switch-desc {
   margin-top: 3px;
   font-size: 12.5px;
+}
+.bot-status-list {
+  max-height: 360px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bot-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--console-border);
+}
+.bot-status-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 12.5px;
+}
+.bot-status-main strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .tips {
   margin: 12px 0 0;
