@@ -165,6 +165,17 @@
             管理员尚未启用 Agent 能力。
           </v-alert>
           <template v-else>
+            <v-select
+              v-if="sandbox?.policy_enabled"
+              v-model="settingsSandboxRuntime"
+              :items="sandboxRuntimeOptions"
+              item-title="title"
+              item-value="value"
+              label="沙盒运行方式（该 Bot）"
+              :disabled="!sandbox?.user_configurable"
+              class="mt-3"
+              data-testid="bot-settings-sandbox-runtime"
+            />
             <div class="switch-row">
               <div>
                 <div class="switch-label">允许该 Bot 使用 Agent 工具</div>
@@ -413,6 +424,7 @@ const settingsModelId = ref('')
 const settingsEnabled = ref(false)
 const settingsStreaming = ref(false)
 const settingsAgentEnabled = ref(false)
+const settingsSandboxRuntime = ref('none')
 const settingsCompressionMaxTurns = ref(10)
 const settingsCompressionStrategy = ref('truncate_by_turns')
 const advancedOpen = ref(false)
@@ -423,6 +435,12 @@ const modelsLoading = ref(false)
 
 const sandbox = computed(() => bot.value?.sandbox)
 const sandboxEnabled = computed(() => Boolean(sandbox.value?.enabled))
+
+const sandboxRuntimeOptions = computed(() => [
+  { title: '关闭（none）', value: 'none' },
+  { title: '本地受限沙盒（local）', value: 'local', props: { disabled: !sandbox.value?.platform?.available } },
+  { title: '第三方沙盒（sandbox）', value: 'sandbox' },
+])
 
 const compressionStrategies = [
   { title: '按轮次截断（truncate_by_turns）', value: 'truncate_by_turns' },
@@ -493,6 +511,8 @@ function hydrateSettings(): void {
   settingsAgentEnabled.value = Boolean(
     bot.value.settings?.agent_enabled ?? bot.value.sandbox?.agent_enabled,
   )
+  settingsSandboxRuntime.value =
+    bot.value.settings?.sandbox_runtime ?? bot.value.sandbox?.runtime ?? 'none'
   settingsCompressionMaxTurns.value = bot.value.settings?.compression_max_turns ?? 10
   settingsCompressionStrategy.value =
     bot.value.settings?.compression_overflow_strategy || 'truncate_by_turns'
@@ -526,9 +546,14 @@ async function saveSettings(): Promise<void> {
       enabled: settingsEnabled.value,
       settings: {
         streaming: settingsStreaming.value,
-        agent_enabled: settingsAgentEnabled.value,
         compression_max_turns: turns,
         compression_overflow_strategy: settingsCompressionStrategy.value,
+        ...(sandbox.value?.policy_enabled
+          ? {
+              agent_enabled: settingsAgentEnabled.value,
+              sandbox_runtime: settingsSandboxRuntime.value,
+            }
+          : {}),
       },
     })
     hydrateSettings()

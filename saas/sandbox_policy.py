@@ -121,11 +121,16 @@ def validate_policy(policy: dict[str, Any], *, platform_info: dict[str, Any] | N
 
 
 def config_patch(
-    policy: dict[str, Any], *, agent_enabled: bool | None = None
+    policy: dict[str, Any],
+    *,
+    agent_enabled: bool | None = None,
+    runtime_override: str | None = None,
 ) -> dict[str, Any]:
     """AstrBot config patch applied to a SaaS-managed bot config."""
     enabled = policy.get("enabled") if agent_enabled is None else bool(agent_enabled and policy.get("enabled"))
     runtime = policy["runtime"] if enabled else "none"
+    if enabled and runtime_override in RUNTIMES and runtime_override != "none":
+        runtime = runtime_override
     return {
         "provider_settings.computer_use_runtime": runtime,
         "provider_settings.computer_use_require_admin": bool(policy.get("require_admin", True)),

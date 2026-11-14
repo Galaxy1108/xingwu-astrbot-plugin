@@ -246,6 +246,10 @@ async def admin_sandbox(request: web.Request) -> web.Response:
         if agent_enabled is None:
             agent_enabled = bool(policy["enabled"])
         effective = bool(policy["enabled"] and agent_enabled)
+        runtime_override = str(settings.get("sandbox_runtime") or "")
+        effective_runtime = policy["runtime"] if effective else "none"
+        if effective and runtime_override in {"local", "sandbox"}:
+            effective_runtime = runtime_override
         bots.append(
             {
                 "id": row["id"],
@@ -253,7 +257,7 @@ async def admin_sandbox(request: web.Request) -> web.Response:
                 "status": row["status"],
                 "owner_email": row["owner_email"] or "",
                 "agent_enabled": bool(agent_enabled),
-                "runtime": policy["runtime"] if effective else "none",
+                "runtime": effective_runtime,
             }
         )
     return ok({"policy": policy, "platform": platform_info, "bots": bots})
@@ -296,7 +300,12 @@ async def admin_update_sandbox(request: web.Request) -> web.Response:
             agent_enabled = bool(policy["enabled"])
         try:
             await container.port.update_config(
-                row["conf_id"], config_patch(policy, agent_enabled=bool(agent_enabled))
+                row["conf_id"],
+                config_patch(
+                    policy,
+                    agent_enabled=bool(agent_enabled),
+                    runtime_override=str(settings.get("sandbox_runtime") or ""),
+                ),
             )
             updated += 1
         except Exception:  # noqa: BLE001

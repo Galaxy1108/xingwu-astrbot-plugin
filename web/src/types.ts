@@ -180,6 +180,7 @@ export interface QrSession {
 export interface BotSettings {
   streaming: boolean
   agent_enabled?: boolean
+  sandbox_runtime?: string
   compression_max_turns: number
   compression_overflow_strategy: string
 }

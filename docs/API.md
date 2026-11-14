@@ -401,7 +401,7 @@ Memory 对象：
   - 返回 `{policy,platform,bots_updated,limits_installed}`；审计 `sandbox.updated`。
 - 新 Bot 创建/扫码 finalize 时自动套用当前策略。
 - 用户侧：`GET /api/bots/{id}` 的 `bot.sandbox` 返回 `{enabled,policy_enabled,agent_enabled,user_configurable,runtime,booter,platform,limits,require_admin}`；
-  `PATCH /api/bots/{id}` `settings:{agent_enabled:bool}` 可在 `allow_user_config=true` 时单独关闭/开启该 Bot 的 Agent；
+  `PATCH /api/bots/{id}` `settings:{agent_enabled:bool,sandbox_runtime:"none|local|sandbox"}` 可在 `allow_user_config=true` 时单独关闭/开启该 Bot 的 Agent，并在管理员允许时选择运行方式（local 需平台可用）；
   管理员关闭策略时返回 409 `sandbox_disabled`，不允许用户配置时返回 403 `sandbox_locked`。
 - 用户只能开关 Agent 能力并查看管理员限制；CPU/内存等 rlimit 由管理员统一设置，不能由用户突破。
 - 资源限制通过进程 rlimit 施加：`RLIMIT_CPU`、`RLIMIT_AS`、`RLIMIT_FSIZE`、`RLIMIT_NOFILE`、`RLIMIT_NPROC`（仅 local 沙盒；第三方沙盒由容器限制）。

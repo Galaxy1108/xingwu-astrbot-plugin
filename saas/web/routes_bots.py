@@ -22,6 +22,10 @@ def _with_sandbox(container, bot: dict) -> dict:
     if agent_enabled is None:
         agent_enabled = bool(policy["enabled"])
     effective = bool(policy["enabled"] and agent_enabled)
+    runtime_override = str(settings.get("sandbox_runtime") or "")
+    effective_runtime = policy["runtime"] if effective else "none"
+    if effective and runtime_override in {"local", "sandbox"}:
+        effective_runtime = runtime_override
     platform_info = detect_platform()
     bot = dict(bot)
     bot["sandbox"] = {
@@ -29,7 +33,8 @@ def _with_sandbox(container, bot: dict) -> dict:
         "policy_enabled": bool(policy["enabled"]),
         "agent_enabled": bool(agent_enabled),
         "user_configurable": bool(policy["allow_user_config"]),
-        "runtime": policy["runtime"] if effective else "none",
+        "runtime": effective_runtime,
+        "default_runtime": policy["runtime"],
         "booter": policy["booter"],
         "platform": platform_info,
         "limits": policy["limits"],
@@ -131,7 +136,47 @@ async def patch_bot(request: web.Request) -> web.Response:
                     status=403,
                 )
             current["agent_enabled"] = bool(incoming["agent_enabled"])
-            patch_config.update(config_patch(policy, agent_enabled=current["agent_enabled"]))
+            patch_config.update(
+                config_patch(
+                    policy,
+                    agent_enabled=current["agent_enabled"],
+                    runtime_override=current.get("sandbox_runtime"),
+                )
+            )
+        if "sandbox_runtime" in incoming:
+            from ..sandbox_policy import (
+                SETTINGS_KEY,
+                config_patch,
+                detect_platform,
+                normalize_policy,
+            )
+
+            policy = normalize_policy(container.settings_store.get(SETTINGS_KEY, {}))
+            if not policy["enabled"]:
+                raise AppError("管理员尚未启用 Agent 能力", code="sandbox_disabled", status=409)
+            if not policy["allow_user_config"]:
+                raise AppError(
+                    "Agent 运行方式由管理员统一管理，用户不能单独修改",
+                    code="sandbox_locked",
+                    status=403,
+                )
+            runtime = str(incoming["sandbox_runtime"] or "none").lower()
+            if runtime not in {"none", "local", "sandbox"}:
+                raise ValidationError("不支持的沙盒运行方式", field="settings")
+            platform_info = detect_platform()
+            if runtime == "local" and not platform_info["available"]:
+                raise ValidationError(
+                    f"当前平台本地沙盒不可用：{platform_info.get('hint') or ''}",
+                    field="settings",
+                )
+            current["sandbox_runtime"] = runtime
+            patch_config.update(
+                config_patch(
+                    policy,
+                    agent_enabled=current.get("agent_enabled", True),
+                    runtime_override=runtime,
+                )
+            )
         if "streaming" in incoming:
             current["streaming"] = bool(incoming["streaming"])
             patch_config["provider_settings.streaming_response"] = current["streaming"]
