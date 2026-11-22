@@ -492,8 +492,8 @@ async function cancelFlow(): Promise<void> {
 }
 
 .step--done .step-index {
-  border-color: #2e7d32;
-  background: #2e7d32;
+  border-color: var(--console-success);
+  background: var(--console-success);
   color: #fff;
 }
 
@@ -703,7 +703,7 @@ async function cancelFlow(): Promise<void> {
   margin: 8px 0 0;
   font-size: 1.2rem;
   font-weight: 650;
-  color: #2e7d32;
+  color: var(--console-success);
 }
 
 .done-desc {

@@ -581,7 +581,7 @@ function ledgerTypeLabel(type?: string): string {
 }
 
 .delta-plus {
-  color: #2e7d32;
+  color: var(--console-success);
   font-weight: 600;
 }
 

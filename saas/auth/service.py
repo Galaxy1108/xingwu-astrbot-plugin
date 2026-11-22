@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import re
@@ -17,6 +18,7 @@ from ..errors import AppError, Forbidden, ValidationError
 from ..security import normalize_invite_code, random_id
 from .invites import InviteService
 from .keys import TenantKeyService
+from .login_throttle import LoginThrottle, identifier_key, ip_key
 from .otp import OtpService, is_valid_email, normalize_email
 from .passwords import (
     MAX_PASSWORD_LENGTH,
@@ -33,6 +35,11 @@ DEFAULT_QUOTA = {"max_bots": 3, "monthly_tokens": 1_000_000, "max_memories": 200
 PLACEHOLDER_EMAIL_DOMAIN = "no-email.local"
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_-]{3,32}$")
 _USERNAME_SAFE_RE = re.compile(r"[^A-Za-z0-9_-]+")
+
+
+@functools.lru_cache(maxsize=1)
+def _dummy_password_hash() -> str:
+    return hash_password(secrets.token_urlsafe(16))
 
 
 def is_placeholder_email(email: str | None) -> bool:
@@ -84,6 +91,7 @@ class AuthService:
         self.audit = audit
         self.mailer = mailer
         self.clock = clock or SystemClock()
+        self.throttle = LoginThrottle(db, settings=settings, clock=self.clock)
 
     # -- queries -------------------------------------------------------
     def get_user(self, user_id: str) -> dict[str, Any] | None:
@@ -538,23 +546,27 @@ class AuthService:
         user_agent: str = "",
     ) -> dict[str, Any]:
         value = str(identifier or "").strip()
+        keys = [identifier_key(value), ip_key(ip)]
+        self.throttle.check(keys)
         if "@" in value:
             user = self.get_user_by_email(value)
         else:
             user = self.get_user_by_username(value)
-        if user is None:
+        stored = str(user.get("password_hash") or "") if user is not None else ""
+        if not stored:
+            # Unknown account and "no password set" look identical to the caller.
+            # Burn comparable hashing time so the response timing does not leak either.
+            verify_password(password, _dummy_password_hash())
+            self.throttle.record_failure(keys)
             raise AppError(
                 "账号或密码错误", code="invalid_credentials", status=401
-            )
-        stored = str(user.get("password_hash") or "")
-        if not stored:
-            raise AppError(
-                "该账号尚未设置密码", code="password_not_set", status=400, field="password"
             )
         if not verify_password(password, stored):
+            self.throttle.record_failure(keys)
             raise AppError(
                 "账号或密码错误", code="invalid_credentials", status=401
             )
+        self.throttle.clear([keys[0]])
         if needs_rehash(stored):
             self.db.execute(
                 "UPDATE users SET password_hash = ? WHERE id = ?",

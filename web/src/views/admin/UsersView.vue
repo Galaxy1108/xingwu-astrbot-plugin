@@ -690,7 +690,7 @@ async function confirmToggle(): Promise<void> {
   display: flex;
   justify-content: space-between;
   padding: 8px 0;
-  border-bottom: 1px dashed #eef1f4;
+  border-bottom: 1px dashed var(--console-border-subtle);
   font-size: 0.86rem;
 }
 

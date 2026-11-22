@@ -22,13 +22,16 @@ export class ApiError extends Error {
   readonly status: number
   readonly code: string
   readonly field: string | null
+  /** 限流类错误（429）返回的等待秒数，其它错误为 0。 */
+  readonly retryAfter: number
 
-  constructor(init: ApiErrorInit) {
+  constructor(init: ApiErrorInit & { retryAfter?: number }) {
     super(init.message)
     this.name = 'ApiError'
     this.status = init.status
     this.code = init.code
     this.field = init.field ?? null
+    this.retryAfter = Number(init.retryAfter ?? 0) || 0
   }
 }
 
@@ -194,7 +197,14 @@ async function fetchOnce<T>(path: string, options: RequestOptions): Promise<T> {
     const code =
       envelope?.error?.code ?? (response.status === 401 ? 'unauthorized' : response.status === 403 ? 'forbidden' : 'http_error')
     const message = envelope?.error?.message || defaultMessage(response.status)
-    const error = new ApiError({ status: response.status, code, message, field: envelope?.error?.field ?? null })
+    const retryAfter = Number((envelope?.error as { retry_after?: number } | undefined)?.retry_after ?? 0)
+    const error = new ApiError({
+      status: response.status,
+      code,
+      message,
+      field: envelope?.error?.field ?? null,
+      retryAfter,
+    })
     if (response.status === 401) {
       unauthorizedHandler?.()
     } else if (response.status === 403) {

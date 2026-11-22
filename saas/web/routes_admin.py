@@ -326,6 +326,14 @@ async def admin_update_sandbox(request: web.Request) -> web.Response:
     )
 
 
+@routes.get("/api/admin/health/detail")
+async def admin_health_detail(request: web.Request) -> web.Response:
+    require_admin(request)
+    from .routes_auth import health_snapshot
+
+    return ok(health_snapshot(container_of(request)))
+
+
 @routes.get("/api/admin/error-logs")
 async def admin_error_logs(request: web.Request) -> web.Response:
     require_admin(request)

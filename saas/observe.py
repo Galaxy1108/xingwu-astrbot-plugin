@@ -102,6 +102,30 @@ class ErrorLogService:
         return int(getattr(cursor, "rowcount", 0) or 0)
 
 
+ERROR_LOG_RETENTION_DAYS = 30
+ERROR_LOG_CLEAN_INTERVAL_SECONDS = 24 * 3600
+
+
+class IntervalGate:
+    """Timestamp throttle: ``due()`` is True at most once per ``interval`` seconds.
+
+    Uses a monotonic clock so wall-clock jumps neither trigger nor suppress runs.
+    The first call is always due.
+    """
+
+    def __init__(self, interval_seconds: float, *, clock=None) -> None:
+        self.interval = float(interval_seconds)
+        self._clock = clock or time.monotonic
+        self._last: float | None = None
+
+    def due(self) -> bool:
+        now = float(self._clock())
+        if self._last is not None and now - self._last < self.interval:
+            return False
+        self._last = now
+        return True
+
+
 class AppLogBuffer(logging.Handler):
     """Keep the most recent backend log lines and mirror them to a file."""
 

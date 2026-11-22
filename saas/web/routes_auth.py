@@ -478,9 +478,8 @@ async def set_my_encryption(request: web.Request) -> web.Response:
 
 
 # ---------------------------------------------------------------- misc
-@routes.get("/api/health")
-async def health(request: web.Request) -> web.Response:
-    container = container_of(request)
+def health_snapshot(container) -> dict:
+    """Full health facts; only exposed to admins (see routes_admin)."""
     db_ok = True
     try:
         container.db.query_one("SELECT 1 AS ok")
@@ -495,19 +494,24 @@ async def health(request: web.Request) -> web.Response:
         (container.clock.now() - 3600,),
         0,
     )
-    return ok(
-        {
-            "status": "ok" if db_ok else "degraded",
-            "db": "ok" if db_ok else "error",
-            "backend": backend,
-            "backend_connected": backend == "astrbot",
-            "recent_errors_1h": int(recent or 0),
-            "version": container.settings.version,
-            "uptime_seconds": int(
-                time.time() - getattr(container, "started_at", time.time())
-            ),
-        }
-    )
+    return {
+        "status": "ok" if db_ok else "degraded",
+        "db": "ok" if db_ok else "error",
+        "backend": backend,
+        "backend_connected": backend == "astrbot",
+        "recent_errors_1h": int(recent or 0),
+        "version": container.settings.version,
+        "uptime_seconds": int(
+            time.time() - getattr(container, "started_at", time.time())
+        ),
+    }
+
+
+@routes.get("/api/health")
+async def health(request: web.Request) -> web.Response:
+    """Public: only the coarse status and DB state. Details are admin-only."""
+    snapshot = health_snapshot(container_of(request))
+    return ok({"status": snapshot["status"], "db": snapshot["db"]})
 
 
 @routes.get("/api/version")

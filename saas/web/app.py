@@ -64,6 +64,9 @@ def fail(error: AppError) -> web.Response:
     headers = {}
     if isinstance(error, CsrfError):
         headers["X-CSRF-Error"] = "1"
+    retry_after = getattr(error, "retry_after", None)
+    if retry_after is not None:
+        headers["Retry-After"] = str(int(retry_after))
     return web.json_response(
         {"ok": False, "error": error.to_dict()}, status=error.status, headers=headers
     )

@@ -209,7 +209,7 @@ async function confirmStop(reason: string): Promise<void> {
 }
 
 .flag-on {
-  color: #2e7d32;
+  color: var(--console-success);
 }
 
 .flag-sep {

@@ -569,7 +569,7 @@ function money(value: number): string {
 }
 
 .credits {
-  color: #2e7d32;
+  color: var(--console-success);
   font-weight: 600;
 }
 

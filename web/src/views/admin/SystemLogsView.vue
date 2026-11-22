@@ -250,7 +250,7 @@ function levelColor(value: string): string {
   color: var(--console-danger);
 }
 .log-line--warning {
-  color: #d69e2e;
+  color: var(--console-warning);
 }
 .log-time {
   color: var(--console-text-muted);

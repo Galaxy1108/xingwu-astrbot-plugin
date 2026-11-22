@@ -209,7 +209,7 @@ function onConfirm(): void {
 
 .confirm-error {
   margin: 6px 0 0;
-  color: #c62828;
+  color: var(--console-danger);
   font-size: 0.78rem;
 }
 

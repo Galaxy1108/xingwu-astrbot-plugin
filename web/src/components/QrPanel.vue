@@ -202,9 +202,9 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  color: #2e7d32;
+  color: var(--console-success);
   font-weight: 600;
-  background: rgba(255, 255, 255, 0.72);
+  background: color-mix(in srgb, var(--console-surface) 72%, transparent);
   border-radius: var(--console-radius);
 }
 

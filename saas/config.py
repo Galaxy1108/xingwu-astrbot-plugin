@@ -59,6 +59,10 @@ class Settings:
     otp_ttl_seconds: int = 600
     otp_resend_seconds: int = 60
     otp_max_attempts: int = 5
+    # Password login throttling (failures are counted per identifier and per IP)
+    login_max_failures: int = 5
+    login_ip_max_failures: int = 20
+    login_window_seconds: int = 900
     # QR
     qr_ttl_seconds: int = 60
     qr_max_refreshes: int = 3
@@ -274,6 +278,9 @@ class Settings:
             "otp_ttl_seconds",
             "otp_resend_seconds",
             "otp_max_attempts",
+            "login_max_failures",
+            "login_ip_max_failures",
+            "login_window_seconds",
             "session_sliding_days",
             "session_absolute_days",
             "admin_session_hours",

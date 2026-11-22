@@ -25,6 +25,11 @@ from .saas.conversations_tools import (
     dispatch as dispatch_chat_tool,
 )
 from .saas.memory.models import MemoryDraft
+from .saas.observe import (
+    ERROR_LOG_CLEAN_INTERVAL_SECONDS,
+    ERROR_LOG_RETENTION_DAYS,
+    IntervalGate,
+)
 from .saas.memory.auto_extract import extract_memories
 from .saas.memory.tools.llm_tools import TOOL_DEFINITIONS, dispatch as dispatch_memory_tool
 from .saas.tenancy import parse_bot_id_from_umo
@@ -46,6 +51,7 @@ class SaaSBotPlugin(Star):
         self._runner = None
         self._server_task: asyncio.Task | None = None
         self._gc_task: asyncio.Task | None = None
+        self._error_log_gate = IntervalGate(ERROR_LOG_CLEAN_INTERVAL_SECONDS)
         try:
             self.container = Container(
                 self.settings,
@@ -336,8 +342,22 @@ class SaaSBotPlugin(Star):
                     sessions = getattr(self.container, "qr_sessions", None)
                     if sessions is not None:
                         await sessions.gc()
+                    self._purge_old_error_logs()
         except asyncio.CancelledError:
             return
+
+    def _purge_old_error_logs(self) -> None:
+        """Drop error_logs older than the retention window, at most once a day."""
+        if self.container is None or not self._error_log_gate.due():
+            return
+        try:
+            removed = self.container.error_logs.clear(
+                older_than_days=ERROR_LOG_RETENTION_DAYS
+            )
+            if removed:
+                logger.info("已清理 %s 条过期错误日志", removed)
+        except Exception:  # noqa: BLE001
+            logger.warning("错误日志自动清理失败", exc_info=True)
 
     async def terminate(self) -> None:
         for task in (self._server_task, self._gc_task):

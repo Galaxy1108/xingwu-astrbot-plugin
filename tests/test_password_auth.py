@@ -177,14 +177,15 @@ async def test_password_login_by_username_email_and_errors(
         assert response.status == 401
         assert body["error"]["code"] == "invalid_credentials"
 
-    # OTP account without a password → password_not_set (400).
+    # OTP account without a password is indistinguishable from an unknown account:
+    # both answer 401 invalid_credentials (no account enumeration).
     user = container.auth.create_user("nopass@example.com")
     response, body = await api.post(
         "/api/auth/password/login",
         json={"identifier": "nopass@example.com", "password": PASSWORD},
     )
-    assert response.status == 400
-    assert body["error"]["code"] == "password_not_set"
+    assert response.status == 401
+    assert body["error"]["code"] == "invalid_credentials"
     assert user["email_verified"] == 1
 
 

@@ -491,6 +491,7 @@ import {
 } from '@/api/auth'
 import type { OAuthProvider } from '@/types'
 import { errorCode, errorMessage, fieldError, isFieldError } from '@/utils/errors'
+import { isApiError } from '@/api/client'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -769,8 +770,12 @@ function mapLoginError(error: unknown): string {
   switch (codeName) {
     case 'invalid_credentials':
       return '账号或密码错误，请重试'
-    case 'password_not_set':
-      return '该账号尚未设置密码，请使用验证码登录或先设置密码'
+    case 'too_many_attempts': {
+      const wait = isApiError(error) ? error.retryAfter : 0
+      return wait > 0
+        ? `尝试次数过多，请 ${Math.ceil(wait / 60)} 分钟后再试`
+        : '尝试次数过多，请稍后再试'
+    }
     case 'username_taken':
       return '用户名已被占用'
     case 'email_taken':
@@ -1170,7 +1175,7 @@ function safeRedirect(): string {
 }
 
 .otp-cell--error {
-  border-color: #f44336;
+  border-color: var(--console-danger);
 }
 
 .otp-hint {
@@ -1180,7 +1185,7 @@ function safeRedirect(): string {
 }
 
 .otp-hint--error {
-  color: #f44336;
+  color: var(--console-danger);
 }
 
 .resend-row {

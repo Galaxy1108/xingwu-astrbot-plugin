@@ -291,6 +291,7 @@
                   size="x-small"
                   variant="text"
                   :title="copied ? '已复制' : '复制'"
+                  :aria-label="copied ? '已复制' : '复制'"
                   @click="copy(bot.conf_id)"
                 >
                   <v-icon size="16">{{ copied ? 'mdi-check' : 'mdi-content-copy' }}</v-icon>
@@ -779,7 +780,7 @@ async function onDelete(): Promise<void> {
   justify-content: space-between;
   gap: 16px;
   padding: 8px 0;
-  border-bottom: 1px dashed #eef1f4;
+  border-bottom: 1px dashed var(--console-border-subtle);
   font-size: 0.85rem;
 }
 
@@ -891,15 +892,15 @@ async function onDelete(): Promise<void> {
 
 .danger-zone {
   padding: 20px;
-  border: 1px solid #f2c6c6;
-  background: rgba(244, 67, 54, 0.07);
+  border: 1px solid var(--console-danger-border);
+  background: var(--console-danger-tint);
 }
 
 .danger-title {
   margin: 0;
   font-size: 1rem;
   font-weight: 650;
-  color: #c62828;
+  color: var(--console-danger);
 }
 
 .danger-desc {

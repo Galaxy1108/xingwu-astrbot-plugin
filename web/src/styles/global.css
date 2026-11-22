@@ -17,6 +17,10 @@
   --console-danger: #c62828;
   --console-danger-soft: rgba(198, 40, 40, 0.12);
   --console-danger-border: rgba(198, 40, 40, 0.36);
+  --console-danger-tint: rgba(198, 40, 40, 0.07);
+  --console-border-subtle: #eef1f4;
+  --console-success: #2e7d32;
+  --console-warning: #d69e2e;
 }
 
 .v-theme--light {
@@ -27,6 +31,10 @@
   --console-text-muted: rgba(0, 0, 0, 0.55);
   --console-border: rgba(0, 0, 0, 0.09);
   --console-primary-soft: #eaf4fa;
+  --console-danger-tint: rgba(198, 40, 40, 0.07);
+  --console-border-subtle: #eef1f4;
+  --console-success: #2e7d32;
+  --console-warning: #d69e2e;
 }
 
 html[data-theme='dark'],
@@ -42,6 +50,10 @@ html[data-theme='dark'] {
   --console-danger: #ff8a80;
   --console-danger-soft: rgba(255, 82, 82, 0.16);
   --console-danger-border: rgba(255, 138, 128, 0.45);
+  --console-danger-tint: rgba(255, 82, 82, 0.08);
+  --console-border-subtle: rgba(255, 255, 255, 0.08);
+  --console-success: #66bb6a;
+  --console-warning: #f0b94a;
 }
 
 .v-theme--dark {
@@ -56,6 +68,10 @@ html[data-theme='dark'] {
   --console-danger: #ff8a80;
   --console-danger-soft: rgba(255, 82, 82, 0.16);
   --console-danger-border: rgba(255, 138, 128, 0.45);
+  --console-danger-tint: rgba(255, 82, 82, 0.08);
+  --console-border-subtle: rgba(255, 255, 255, 0.08);
+  --console-success: #66bb6a;
+  --console-warning: #f0b94a;
 }
 
 html,

@@ -231,7 +231,7 @@ class Container:
         if admin is None:
             admin = self.auth.create_user(email, role="admin")
             result["admin_created"] = admin["email"]
-            print(f"[seed] 管理员账号已创建：{email}（OTP 登录，无需密码）")
+            logger.info("[seed] 管理员账号已创建：%s（OTP 登录，无需密码）", email)
         elif admin["role"] != "admin":
             self.db.execute(
                 "UPDATE users SET role = 'admin' WHERE id = ?", (admin["id"],)
