@@ -160,6 +160,16 @@
       </v-card>
     </v-dialog>
 
+    <ConfirmDialog
+      v-model="revokeOpen"
+      title="撤销分享链接？"
+      message="撤销后，任何已拿到该链接的人都将无法再查看这段对话。该操作不可恢复，可重新生成新链接。"
+      confirm-text="撤销分享"
+      danger
+      :loading="revoking"
+      @confirm="revoke"
+    />
+
     <v-dialog v-model="shareOpen" max-width="560">
       <v-card class="share-dialog">
         <v-card-title class="share-dialog-title">分享链接</v-card-title>
@@ -190,7 +200,7 @@
             color="error"
             :loading="revoking"
             data-testid="conversation-share-revoke"
-            @click="revoke"
+            @click="revokeOpen = true"
           >
             撤销分享
           </v-btn>
@@ -210,6 +220,7 @@ import BotTabs from '@/components/BotTabs.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
 import ConversationMessages from '@/components/ConversationMessages.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useBotsStore } from '@/stores/bots'
 import { useUiStore } from '@/stores/ui'
 import { useClipboard } from '@/composables/useClipboard'
@@ -371,6 +382,7 @@ async function share(): Promise<void> {
 
 async function revoke(): Promise<void> {
   if (!selected.value) return
+  revokeOpen.value = false
   revoking.value = true
   shareError.value = ''
   try {
@@ -385,6 +397,8 @@ async function revoke(): Promise<void> {
     revoking.value = false
   }
 }
+
+const revokeOpen = ref(false)
 
 async function copyShare(): Promise<void> {
   if (!currentShare.value?.url) return

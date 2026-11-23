@@ -16,7 +16,7 @@ from .audit import AuditService
 from .clock import Clock, SystemClock
 from .db import Database
 from .errors import AppError, Conflict, NotFound, ValidationError
-from .memory.storage.sqlcipher import MemoryStorage, MemoryStorageError
+from .memory.storage.sqlcipher import MemoryStorage
 from .ports import AstrBotPort
 from .templates import TemplateService
 

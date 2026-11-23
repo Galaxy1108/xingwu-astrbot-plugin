@@ -933,6 +933,9 @@ export interface SandboxPlatform {
 export interface SandboxConfig {
   policy: SandboxPolicy
   platform: SandboxPlatform
+  job_id?: string
+  total?: number
+  status?: string
   bots?: Array<{
     id: string
     name: string

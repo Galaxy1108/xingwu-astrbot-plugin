@@ -152,7 +152,6 @@ def install_runtime_limits(policy: dict[str, Any]) -> bool:
             SandboxLimits._saas_original_init = original_init  # type: ignore[attr-defined]
 
         def patched_init(self, *args, **kwargs):
-            names = ["cpu_seconds", "file_size_bytes", "memory_bytes", "open_files", "processes"]
             if not args and not kwargs:
                 kwargs = {
                     "cpu_seconds": int(limits["cpu_seconds"]),

@@ -466,7 +466,7 @@ async def set_my_encryption(request: web.Request) -> web.Response:
         confirm = str(body.get("confirm") or "").strip()
         if confirm != "确认解密":
             raise ValidationError("请输入「确认解密」以继续", field="confirm")
-    status = await container.encryption.start(
+    await container.encryption.start(
         user_id=user["id"],
         enabled=enabled,
         actor_id=user["id"],

@@ -28,7 +28,7 @@ from .bots import MAX_NAME_LENGTH, PLATFORM_TYPES, BotService
 from .clock import Clock, SystemClock
 from .config import Settings
 from .db import Database
-from .errors import AppError, Conflict, NotFound, ValidationError
+from .errors import AppError, NotFound, ValidationError
 from .ports import AstrBotPort
 from .qr import qr_data_url
 

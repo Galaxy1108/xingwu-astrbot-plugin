@@ -19,7 +19,7 @@ from .audit import AuditService
 from .bots import BotService
 from .clock import Clock, SystemClock
 from .config import Settings
-from .errors import AppError, Conflict, NotFound
+from .errors import AppError, Conflict
 from .ports import AstrBotPort
 
 logger = logging.getLogger(__name__)
@@ -232,7 +232,7 @@ class QrService:
     async def finalize(
         self, *, user_id: str, bot_id: str, ip: str = ""
     ) -> dict[str, Any]:
-        bot = self.bots.get_for_user(user_id, bot_id)
+        self.bots.get_for_user(user_id, bot_id)  # ownership check raises if not owned
         session = self._session_for(bot_id)
         # The UI polls every 2s, but API clients may call finalize right after
         # the scan confirmation. Catch up once so a successful scan is not lost.

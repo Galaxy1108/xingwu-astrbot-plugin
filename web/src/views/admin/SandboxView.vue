@@ -111,9 +111,14 @@
           <v-btn block color="primary" variant="tonal" size="large" :loading="saving" class="mt-4" @click="save">
             保存并应用到全部 Bot
           </v-btn>
-          <div v-if="applied" class="text-caption muted mt-3">
-            已更新 {{ applied.bots_updated ?? 0 }} 个 Bot 配置 · 资源限制{{ applied.limits_installed ? '已安装' : '未安装' }}
+          <div v-if="job" class="text-caption muted mt-3">
+            进度 {{ job.done }}/{{ job.total }}
+            <span v-if="job.failed"> · 失败 {{ job.failed }}</span>
+            <span v-if="job.status === 'running'"> · 应用中…</span>
           </div>
+          <ul v-if="job?.errors?.length" class="job-errors">
+            <li v-for="item in job.errors" :key="item.bot_id">{{ item.bot_id }}：{{ item.message }}</li>
+          </ul>
         </v-card>
       </v-col>
     </v-row>
@@ -123,17 +128,17 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import PageHeader from '@/components/PageHeader.vue'
-import { getSandboxConfig, updateSandboxConfig } from '@/api/admin'
-import type { SandboxConfig, SandboxPolicy, SandboxPlatform } from '@/types'
+import { getSandboxConfig, getSandboxJob, updateSandboxConfig, type SandboxJobStatus } from '@/api/admin'
+import type { SandboxConfig as SandboxConfigView, SandboxPolicy, SandboxPlatform } from '@/types'
 import { errorMessage } from '@/utils/errors'
 
 const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
 const saved = ref('')
-const applied = ref<SandboxConfig | null>(null)
+const job = ref<SandboxJobStatus | null>(null)
 const platform = ref<SandboxPlatform>({ os: '', backend: '', available: false, binary: '', hint: '' })
-const bots = ref<NonNullable<SandboxConfig['bots']>>([])
+const bots = ref<NonNullable<SandboxConfigView['bots']>>([])
 const policy = ref<SandboxPolicy>({
   enabled: false,
   allow_user_config: false,
@@ -175,12 +180,26 @@ async function save(): Promise<void> {
   error.value = ''
   saved.value = ''
   try {
-    const result = await updateSandboxConfig(policy.value)
-    policy.value = result.policy
-    platform.value = result.platform
-    bots.value = result.bots ?? []
-    applied.value = result
-    saved.value = '沙盒策略已保存并应用'
+    const accepted = await updateSandboxConfig(policy.value)
+    policy.value = accepted.policy
+    platform.value = accepted.platform
+    job.value = null
+    const jobId = accepted.job_id
+    if (jobId) {
+      // 后台逐个 Bot 应用，轮询进度直到结束
+      for (let i = 0; i < 600; i += 1) {
+        const status = await getSandboxJob(jobId)
+        job.value = status
+        if (status.status !== 'running') break
+        await new Promise((resolve) => setTimeout(resolve, 1000))
+      }
+    }
+    const fresh = await getSandboxConfig()
+    bots.value = fresh.bots ?? []
+    const failed = job.value?.failed ?? 0
+    saved.value = failed
+      ? `沙盒策略已保存；${failed} 个 Bot 应用失败，请查看下方明细`
+      : '沙盒策略已保存并应用到全部 Bot'
   } catch (err) {
     error.value = errorMessage(err, '保存沙盒配置失败')
   } finally {
@@ -248,6 +267,7 @@ async function save(): Promise<void> {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.job-errors { margin: 6px 0 0; padding-left: 18px; font-size: 12px; color: var(--console-danger); }
 .tips {
   margin: 12px 0 0;
   padding-left: 18px;

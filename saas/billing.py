@@ -15,7 +15,7 @@ from typing import Any
 from .audit import AuditService
 from .clock import Clock, SystemClock
 from .db import Database
-from .errors import AppError, Conflict, NotFound, ValidationError
+from .errors import Conflict, NotFound, ValidationError
 from .security import random_id
 
 

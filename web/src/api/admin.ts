@@ -440,3 +440,16 @@ export function updateSandboxConfig(
 ): Promise<SandboxConfig> {
   return api.put<SandboxConfig>('/admin/sandbox', { policy })
 }
+
+
+export interface SandboxJobStatus {
+  status: 'running' | 'done' | 'failed'
+  total: number
+  done: number
+  failed: number
+  errors: Array<{ bot_id: string; message: string }>
+}
+
+export function getSandboxJob(jobId: string): Promise<SandboxJobStatus> {
+  return api.get<SandboxJobStatus>(`/admin/sandbox/jobs/${encodeURIComponent(jobId)}`)
+}
